@@ -22,8 +22,8 @@ static uint16_t R30, R37, R3D, R43, R47, R48, R4B, R7E;
 static const  uint32_t F_MIN = 1800000;
 static const  uint32_t F_MAX = 130000000;
 
-static const  uint32_t F_BFM_MIN = 7600000;
-static const  uint32_t F_BFM_MAX = 10800000;
+//static const  uint32_t F_BFM_MIN = 7600000;
+//static const  uint32_t F_BFM_MAX = 10800000;
 
 enum State {
     SPECTRUM,
@@ -413,14 +413,14 @@ uint8_t GetRssi() {
     return clamp(BK4819_GetRSSI(), 0, 255);
 }
 
-static void ListenBK1080() {
-    if (fMeasure != GetPeakF()) {
-        fMeasure = GetPeakF();
-        BK1080_Init(fMeasure * 1e-4, true);
-        BK1080_SetFrequency(fMeasure * 1e-4);
-    }
-    BK1080_Mute(false);
-}
+//static void ListenBK1080() {
+//    if (fMeasure != GetPeakF()) {
+//        fMeasure = GetPeakF();
+//        BK1080_Init(fMeasure * 1e-4, true);
+//        BK1080_SetFrequency(fMeasure * 1e-4);
+//    }
+//    BK1080_Mute(false);
+//}
 
 static void ListenBK4819() {
     if (fMeasure != GetPeakF()) {
@@ -432,9 +432,9 @@ static void ListenBK4819() {
     ToggleAFBit(true);
 }
 
-static bool IsBroadcastFM(uint32_t f) {
-    return f >= F_BFM_MIN && f <= F_BFM_MAX;
-}
+//static bool IsBroadcastFM(uint32_t f) {
+//    return f >= F_BFM_MIN && f <= F_BFM_MAX;
+//}
 
 static bool audioState = true;
 static void ToggleAudio(bool on) {
@@ -461,16 +461,17 @@ static void ToggleRX(bool on) {
     BK4819_set_GPIO_pin(BK4819_GPIO6_PIN2_GREEN, on);
 
     if (on) {
-        if (IsBroadcastFM(peak.f)) {
-            ListenBK1080();
+        //if (IsBroadcastFM(peak.f)) {
+        if (false) {
+            //ListenBK1080();
         } else {
             ListenBK4819();
         }
     } else {
         ToggleAFDAC(false);
         ToggleAFBit(false);
-        BK1080_Mute(true);
-        BK1080_Init(0, false);
+        //BK1080_Mute(true);
+        //BK1080_Init(0, false);
         SetBW(GetBWIndex());
     }
 }

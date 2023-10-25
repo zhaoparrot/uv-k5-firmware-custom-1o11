@@ -137,9 +137,9 @@ ifeq ($(ENABLE_UART),1)
 	OBJS += driver/aes.o
 endif
 OBJS += driver/backlight.o
-#ifeq ($(ENABLE_FMRADIO), 1)
+ifeq ($(ENABLE_FMRADIO), 1)
 	OBJS += driver/bk1080.o
-#endif
+endif
 OBJS += driver/bk4819.o
 ifeq ($(filter $(ENABLE_AIRCOPY) $(ENABLE_UART), 1), 1)
 	OBJS += driver/crc.o
