@@ -281,14 +281,14 @@ static uint8_t my_abs(signed v) { return v > 0 ? v : -v; }
 // Radio functions
 
 static void ToggleAFBit(bool on) {
-    uint16_t reg = BK4819_ReadRegister(BK4819_REG_47);
+    uint16_t reg = BK4819_ReadRegister(0x47u);
     reg &= ~(1 << 8);
     if (on) reg |= on << 8;
-    BK4819_WriteRegister(BK4819_REG_47, reg);
+    BK4819_WriteRegister(0x47u, reg);
 }
 
 static void SetModulation(ModulationType type) {
-    uint16_t reg = BK4819_ReadRegister(BK4819_REG_47);
+    uint16_t reg = BK4819_ReadRegister(0x47u);
     reg &= ~(0x7 << 8);
     reg |= 0x1 << 8;
     switch (type) {
@@ -304,7 +304,7 @@ static void SetModulation(ModulationType type) {
     }
     if (type == MOD_USB) {
         BK4819_WriteRegister(0x3D, 0x56A5);
-        BK4819_WriteRegister(BK4819_REG_37, 0x160F);
+        BK4819_WriteRegister(0x37, 0x160F);
         BK4819_WriteRegister(0x48, 0x03A8);
         BK4819_WriteRegister(0x4B, R4B | (1 << 5));
         BK4819_WriteRegister(0x7E, R7E);
@@ -319,35 +319,35 @@ static void SetModulation(ModulationType type) {
         BK4819_WriteRegister(0x7E, R7E);
     } else {
         BK4819_WriteRegister(0x3D, R3D);
-        BK4819_WriteRegister(BK4819_REG_37, R37);
+        BK4819_WriteRegister(0x37u, R37);
         BK4819_WriteRegister(0x48, R48);
         BK4819_WriteRegister(0x4B, R4B);
         BK4819_WriteRegister(0x7E, R7E);
     }
-    BK4819_WriteRegister(BK4819_REG_47, reg);
+    BK4819_WriteRegister(0x47, reg);
 }
 
 static void ToggleAFDAC(bool on) {
-    uint32_t Reg = BK4819_ReadRegister(BK4819_REG_30);
+    uint32_t Reg = BK4819_ReadRegister(0x30u);
     Reg &= ~(1 << 9);
     if (on) Reg |= (1 << 9);
-    BK4819_WriteRegister(BK4819_REG_30, Reg);
+    BK4819_WriteRegister(0x30u, Reg);
 }
 
 static void ResetRSSI() {
-    uint32_t Reg = BK4819_ReadRegister(BK4819_REG_30);
+    uint32_t Reg = BK4819_ReadRegister(0x30u);
     Reg &= ~1;
-    BK4819_WriteRegister(BK4819_REG_30, Reg);
+    BK4819_WriteRegister(0x30u, Reg);
     Reg |= 1;
-    BK4819_WriteRegister(BK4819_REG_30, Reg);
+    BK4819_WriteRegister(0x30u, Reg);
 }
 
 static void SetF(uint32_t f) {
     BK4819_set_rf_filter_path(f);
     BK4819_set_rf_frequency(f,true);
-    uint16_t reg = BK4819_ReadRegister(BK4819_REG_30);
-    BK4819_WriteRegister(BK4819_REG_30, 0);
-    BK4819_WriteRegister(BK4819_REG_30, reg);
+    uint16_t reg = BK4819_ReadRegister(0x30u);
+    BK4819_WriteRegister(0x30u, 0);
+    BK4819_WriteRegister(0x30u, reg);
 }
 
 static void SetBW(BK4819_filter_bandwidth_t bw) {

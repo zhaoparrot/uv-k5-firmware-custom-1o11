@@ -68,7 +68,7 @@ ENABLE_TX_TIMEOUT_BAR            := 0
 # Tx Audio Bar 0.3 kB
 ENABLE_TX_AUDIO_BAR              := 0
 # Side Button Menu 0.3 kB
-ENABLE_SIDE_BUTT_MENU            := 1
+ENABLE_SIDE_BUTT_MENU            := 0
 # Key Lock 0.4 kB
 ENABLE_KEYLOCK                   := 1
 #ENABLE_PANADAPTER               := 0
