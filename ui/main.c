@@ -152,7 +152,7 @@ void UI_drawBars(uint8_t *p, const unsigned int level)
 
 	#pragma GCC diagnostic pop
 }
-
+uint8_t  LastIncomeChannel = 0;
 #ifdef ENABLE_TX_AUDIO_BAR
 
 	uint32_t sqrt16(uint32_t value)
@@ -530,7 +530,7 @@ void UI_DisplayMain(void)
 			if (!single_vfo && same_vfo)
 				memcpy(p_line0 + 0, BITMAP_VFO_DEFAULT, sizeof(BITMAP_VFO_DEFAULT));
 			else
-			if (g_eeprom.cross_vfo_rx_tx != CROSS_BAND_OFF)
+			if (g_eeprom.cross_vfo_rx_tx != CROSS_BAND_OFF || vfo_num == LastIncomeChannel)
 				memcpy(p_line0 + 0, BITMAP_VFO_NOT_DEFAULT, sizeof(BITMAP_VFO_NOT_DEFAULT));
 		}
 		else
@@ -540,6 +540,7 @@ void UI_DisplayMain(void)
 				memcpy(p_line0 + 0, BITMAP_VFO_DEFAULT, sizeof(BITMAP_VFO_DEFAULT));
 			else
 			//if (g_eeprom.cross_vfo_rx_tx != CROSS_BAND_OFF)
+				if (vfo_num == LastIncomeChannel)
 				memcpy(p_line0 + 0, BITMAP_VFO_NOT_DEFAULT, sizeof(BITMAP_VFO_NOT_DEFAULT));
 		}
 
@@ -577,6 +578,12 @@ void UI_DisplayMain(void)
 				#else
 					UI_PrintStringSmall("RX", 14, 0, line);
 				#endif
+					LastIncomeChannel = g_eeprom.rx_vfo;
+					// invert the text pixels
+					for (int i = 13; i < 14 + (8 * 2); i++)
+					{
+						g_frame_buffer[line][i] ^= 0xFF;
+					}
 			}
 		}
 
