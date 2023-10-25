@@ -24,8 +24,9 @@
 #include "app/generic.h"
 #include "app/main.h"
 #include "app/search.h"
+#define ENABLE_SPECTRUM
 #ifdef ENABLE_SPECTRUM
-//	#include "app/spectrum.h"
+	#include "app/spectrum.h"
 #endif
 #include "audio.h"
 #include "board.h"
@@ -342,6 +343,11 @@ void processFKeyFunction(const key_code_t Key)
 					toggle_chan_scanlist();
 				#endif
 			#endif
+#ifdef	ENABLE_SPECTRUM
+					APP_RunSpectrum();
+					g_request_display_screen = DISPLAY_MAIN;
+
+#endif
 
 			break;
 

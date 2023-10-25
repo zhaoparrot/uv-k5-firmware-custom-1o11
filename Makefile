@@ -11,7 +11,7 @@ ENABLE_SWD                       := 0
 ENABLE_OVERLAY                   := 0
 ENABLE_LTO                       := 1
 # UART Programming 2.9 kB
-ENABLE_UART                      := 1
+ENABLE_UART                      := 0
 ENABLE_UART_DEBUG                := 0
 # AirCopy 2.5 kB
 ENABLE_AIRCOPY                   := 0
@@ -21,7 +21,7 @@ ENABLE_AIRCOPY_RX_REBOOT         := 0
 ENABLE_FMRADIO_76_90             := 0
 ENABLE_FMRADIO_68_108            := 0
 ENABLE_FMRADIO_76_108            := 0
-ENABLE_FMRADIO_875_108           := 1
+ENABLE_FMRADIO_875_108           := 0
 # NOAA 1.2 kB
 ENABLE_NOAA                      := 0
 # Voice 1.7 kB
@@ -38,7 +38,7 @@ ENABLE_PWRON_PASSWORD            := 0
 ENABLE_RESET_AES_KEY             := 0
 ENABLE_BIG_FREQ                  := 1
 ENABLE_SMALL_BOLD                := 0
-ENABLE_TRIM_TRAILING_ZEROS       := 1
+ENABLE_TRIM_TRAILING_ZEROS       := 0
 ENABLE_KEEP_MEM_NAME             := 1
 ENABLE_WIDE_RX                   := 0
 ENABLE_TX_WHEN_AM                := 0
@@ -125,6 +125,7 @@ OBJS =
 # Startup files
 OBJS += start.o
 OBJS += init.o
+OBJS += app/spectrum.o
 ifeq ($(ENABLE_OVERLAY),1)
 	OBJS += sram-overlay.o
 endif
@@ -136,9 +137,9 @@ ifeq ($(ENABLE_UART),1)
 	OBJS += driver/aes.o
 endif
 OBJS += driver/backlight.o
-ifeq ($(ENABLE_FMRADIO), 1)
+#ifeq ($(ENABLE_FMRADIO), 1)
 	OBJS += driver/bk1080.o
-endif
+#endif
 OBJS += driver/bk4819.o
 ifeq ($(filter $(ENABLE_AIRCOPY) $(ENABLE_UART), 1), 1)
 	OBJS += driver/crc.o

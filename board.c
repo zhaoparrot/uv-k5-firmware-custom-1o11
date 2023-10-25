@@ -508,7 +508,12 @@ void BOARD_Init(void)
 {
 	BOARD_PORTCON_Init();
 	BOARD_GPIO_Init();
+#ifdef ENABLE_UART
 	CRC_Init();
+#endif
+//#ifdef ENABLE_AIRCOPY
+//	CRC_Init();
+//#endif
 	BOARD_ADC_Init();
 	ST7565_Init(true);
 
