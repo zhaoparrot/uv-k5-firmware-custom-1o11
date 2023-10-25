@@ -11,7 +11,7 @@ ENABLE_SWD                       := 0
 ENABLE_OVERLAY                   := 0
 ENABLE_LTO                       := 1
 # UART Programming 2.9 kB
-ENABLE_UART                      := 0
+ENABLE_UART                      := 1
 ENABLE_UART_DEBUG                := 0
 # AirCopy 2.5 kB
 ENABLE_AIRCOPY                   := 0
@@ -255,7 +255,7 @@ CFLAGS =
 
 ifeq ($(ENABLE_CLANG),0)
 	#CFLAGS += -Os -Wall -Werror -mcpu=cortex-m0 -fno-builtin -fshort-enums -fno-delete-null-pointer-checks -std=c11 -MMD
-	CFLAGS += -Os -Werror -mcpu=cortex-m0 -std=c11 -MMD
+	CFLAGS += -Os -Werror -mcpu=cortex-m0 -fmodulo-sched -freorder-blocks-algorithm=stc -std=c11 -MMD
 else
 	# Oz needed to make it fit on flash
 	CFLAGS += -Oz -Werror -mcpu=cortex-m0 -fno-builtin -fshort-enums -fno-delete-null-pointer-checks -std=c11 -MMD
