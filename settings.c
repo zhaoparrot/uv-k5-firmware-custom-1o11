@@ -242,13 +242,21 @@ void SETTINGS_save(void)
 
 	{
 		struct {
-			uint32_t password;
-			uint32_t spare;
+			uint32_t     password;
+			#ifdef ENABLE_MDC1200
+				uint16_t mdc1200_id;     // 1of11
+				uint8_t  spare[2];
+			#else
+				uint8_t  spare[4];
+			#endif
 		} __attribute__((packed)) array;
 
 		memset(&array, 0xff, sizeof(array));
 		#ifdef ENABLE_PWRON_PASSWORD
 			array.password = g_eeprom.power_on_password;
+		#endif
+		#ifdef ENABLE_MDC1200
+			array.mdc1200_id = g_eeprom.mdc1200_id;
 		#endif
 
 		EEPROM_WriteBuffer8(0x0E98, &array);
@@ -377,7 +385,9 @@ void SETTINGS_save_channel(const unsigned int channel, const unsigned int vfo, c
 		m_channel.rx_ctcss_cdcss_type  = p_vfo->freq_config_rx.code_type;
 //		m_channel.unused1:2
 		m_channel.tx_ctcss_cdcss_type  = p_vfo->freq_config_tx.code_type;
-//		m_channel.unused2:2
+		#ifdef ENABLE_MDC1200
+			m_channel.mdc1200_mode     = p_vfo->mdc1200_mode;
+		#endif
 		m_channel.tx_offset_dir        = p_vfo->tx_offset_freq_dir;
 //		m_channel.unused3:2
 		m_channel.am_mode              = p_vfo->am_mode & 1u;

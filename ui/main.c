@@ -670,11 +670,28 @@ void UI_DisplayMain(void)
 					case MDF_FREQUENCY:	// just channel frequency
 
 						#ifdef ENABLE_BIG_FREQ
+
 							NUMBER_ToDigits(frequency, str);
+
 							// show the main large frequency digits
 							UI_DisplayFrequency(str, x, line, false, false);
+
 							// show the remaining 2 small frequency digits
-							UI_Displaysmall_digits(2, str + 6, x + 81, line + 1, true);
+							#ifdef ENABLE_TRIM_TRAILING_ZEROS
+							{
+								unsigned int small_num = 2;
+								if (str[7] == 0)
+								{
+									small_num--;
+									if (str[6] == 0)
+										small_num--;
+								}
+								UI_Displaysmall_digits(small_num, str + 6, x + 81, line + 1, true);
+							}
+							#else
+								UI_Displaysmall_digits(2, str + 6, x + 81, line + 1, true);
+							#endif
+
 						#else
 							// show the frequency in the main font
 							sprintf(str, "%03u.%05u", frequency / 100000, frequency % 100000);
@@ -733,14 +750,27 @@ void UI_DisplayMain(void)
 //			if (IS_FREQ_CHANNEL(g_eeprom.screen_channel[vfo_num]))
 			{	// frequency mode
 				#ifdef ENABLE_BIG_FREQ
-
+					
 					NUMBER_ToDigits(frequency, str);  // 8 digits
 
 					// show the main large frequency digits
 					UI_DisplayFrequency(str, x, line, false, false);
 
 					// show the remaining 2 small frequency digits
-					UI_Displaysmall_digits(2, str + 6, x + 81, line + 1, true);
+					#ifdef ENABLE_TRIM_TRAILING_ZEROS
+					{
+						unsigned int small_num = 2;
+						if (str[7] == 0)
+						{
+							small_num--;
+							if (str[6] == 0)
+								small_num--;
+						}
+						UI_Displaysmall_digits(small_num, str + 6, x + 81, line + 1, true);
+					}
+					#else
+						UI_Displaysmall_digits(2, str + 6, x + 81, line + 1, true);
+					#endif
 
 				#else
 					// show the frequency in the main font
@@ -843,24 +873,31 @@ void UI_DisplayMain(void)
 		}
 		UI_PrintStringSmall(str, LCD_WIDTH + 24, 0, line + 1);
 
-		if (state == VFO_STATE_NORMAL || state == VFO_STATE_ALARM)
-		{	// show the TX power
-			const char pwr_list[] = "LMH";
-			const unsigned int i = g_eeprom.vfo_info[vfo_num].output_power;
-			str[0] = (i < ARRAY_SIZE(pwr_list)) ? pwr_list[i] : '\0';
-			str[1] = '\0';
-			UI_PrintStringSmall(str, LCD_WIDTH + 46, 0, line + 1);
+		#ifdef ENABLE_TX_WHEN_AM
+			if (state == VFO_STATE_NORMAL || state == VFO_STATE_ALARM)
+		#else
+			if ((state == VFO_STATE_NORMAL || state == VFO_STATE_ALARM) && !g_current_vfo->am_mode) // not allowed to TX if in AM mode
+		#endif
+		{
+			if (FREQUENCY_tx_freq_check(g_current_vfo->p_tx->frequency) == 0)
+			{	// show the TX power
+				const char pwr_list[] = "LMH";
+				const unsigned int i = g_eeprom.vfo_info[vfo_num].output_power;
+				str[0] = (i < ARRAY_SIZE(pwr_list)) ? pwr_list[i] : '\0';
+				str[1] = '\0';
+				UI_PrintStringSmall(str, LCD_WIDTH + 46, 0, line + 1);
+			}
+		
+			if (g_eeprom.vfo_info[vfo_num].freq_config_rx.frequency != g_eeprom.vfo_info[vfo_num].freq_config_tx.frequency)
+			{	// show the TX offset symbol
+				const char dir_list[] = "\0+-";
+				const unsigned int i = g_eeprom.vfo_info[vfo_num].tx_offset_freq_dir;
+				str[0] = (i < sizeof(dir_list)) ? dir_list[i] : '?';
+				str[1] = '\0';
+				UI_PrintStringSmall(str, LCD_WIDTH + 54, 0, line + 1);
+			}
 		}
-
-		if (g_eeprom.vfo_info[vfo_num].freq_config_rx.frequency != g_eeprom.vfo_info[vfo_num].freq_config_tx.frequency)
-		{	// show the TX offset symbol
-			const char dir_list[] = "\0+-";
-			const unsigned int i = g_eeprom.vfo_info[vfo_num].tx_offset_freq_dir;
-			str[0] = (i < sizeof(dir_list)) ? dir_list[i] : '?';
-			str[1] = '\0';
-			UI_PrintStringSmall(str, LCD_WIDTH + 54, 0, line + 1);
-		}
-
+		
 		// show the TX/RX reverse symbol
 		if (g_eeprom.vfo_info[vfo_num].frequency_reverse)
 			UI_PrintStringSmall("R", LCD_WIDTH + 62, 0, line + 1);
