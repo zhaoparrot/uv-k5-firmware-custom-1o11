@@ -51,6 +51,9 @@
 #include "frequencies.h"
 #include "functions.h"
 #include "helper/battery.h"
+#ifdef ENABLE_MDC1200
+	#include "mdc1200.h"
+#endif
 #include "misc.h"
 #include "radio.h"
 #include "settings.h"
@@ -65,8 +68,9 @@
 #include "ui/ui.h"
 
 // original QS front end register settings
+// 0x03BE   00000 011 101 11 110
 const uint8_t orig_lna_short = 3;   //   0dB
-const uint8_t orig_lna       = 2;   // -14dB
+const uint8_t orig_lna       = 5;   //  -4dB
 const uint8_t orig_mixer     = 3;   //   0dB
 const uint8_t orig_pga       = 6;   //  -3dB
 
@@ -244,7 +248,7 @@ static void APP_process_rx(void)
 		goto Skip;
 	}
 
-	if (g_scan_state_dir != SCAN_STATE_DIR_OFF) // && IS_FREQ_CHANNEL(g_scan_next_channel))  
+	if (g_scan_state_dir != SCAN_STATE_DIR_OFF) // && IS_FREQ_CHANNEL(g_scan_next_channel))
 	{
 		if (g_squelch_open)
 		{
@@ -262,7 +266,7 @@ static void APP_process_rx(void)
 			}
 			return;
 		}
-		
+
 		Mode = END_OF_RX_MODE_END;
 		goto Skip;
 	}
@@ -363,7 +367,7 @@ static void APP_process_rx(void)
 	{
 		Mode = END_OF_RX_MODE_END;
 	}
-	
+
 	if (!g_end_of_rx_detected_maybe &&
 	     Mode == END_OF_RX_MODE_NONE &&
 	     g_next_time_slice_40ms &&
@@ -397,7 +401,7 @@ Skip:
 			break;
 
 		case END_OF_RX_MODE_TTE:
-		
+
 			if (g_eeprom.tail_note_elimination)
 			{
 				GPIO_ClearBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
@@ -407,7 +411,7 @@ Skip:
 				g_end_of_rx_detected_maybe              = true;
 				g_speaker_enabled                        = false;
 			}
-			
+
 			break;
 	}
 
@@ -487,6 +491,10 @@ bool APP_start_listening(function_type_t Function, const bool reset_am_fix)
 			BK1080_Init(0, false);
 	#endif
 
+	#ifdef ENABLE_MDC1200
+		MDC1200_reset_rx();
+	#endif
+
 	// clear the other vfo's rssi level (to hide the antenna symbol)
 	g_vfo_rssi_bar_level[(chan + 1) & 1u] = 0;
 
@@ -563,19 +571,28 @@ bool APP_start_listening(function_type_t Function, const bool reset_am_fix)
 			AM_fix_10ms(chan);
 		}
 		else
+		{
 			BK4819_WriteRegister(0x13, (lna_short << 8) | (lna << 5) | (mixer << 3) | (pga << 0));
+		}
 	}
 #else
 	(void)reset_am_fix;
 #endif
 
 	// AF gain - original QS values
-	BK4819_WriteRegister(0x48,
-		(11u << 12)                 |     // ??? .. 0 to 15, doesn't seem to make any difference
-		( 0u << 10)                 |     // AF Rx Gain-1
-		(g_eeprom.volume_gain << 4) |     // AF Rx Gain-2
-		(g_eeprom.dac_gain    << 0));     // AF DAC Gain (after Gain-1 and Gain-2)
-
+	if (g_rx_vfo->am_mode)
+	{
+		BK4819_WriteRegister(0x48, 0xB3A8);
+	}
+	else
+	{
+		BK4819_WriteRegister(0x48,
+			(11u << 12)                 |     // ??? .. 0 to 15, doesn't seem to make any difference
+			( 0u << 10)                 |     // AF Rx Gain-1
+			(g_eeprom.volume_gain << 4) |     // AF Rx Gain-2
+			(g_eeprom.dac_gain    << 0));     // AF DAC Gain (after Gain-1 and Gain-2)
+	}
+	
 	#ifdef ENABLE_VOICE
 		#ifdef MUTE_AUDIO_FOR_VOICE
 			if (g_voice_write_index == 0)
@@ -602,7 +619,7 @@ bool APP_start_listening(function_type_t Function, const bool reset_am_fix)
 		g_update_display = true;
 
 	g_update_status = true;
-	
+
 	return true;
 }
 
@@ -1191,15 +1208,15 @@ void APP_process(void)
 				g_rx_reception_mode    = RX_MODE_NONE;
 
 				if (g_scan_next_channel <= USER_CHANNEL_LAST)
-					APP_next_channel();    
+					APP_next_channel();
 				else
 				if (IS_FREQ_CHANNEL(g_scan_next_channel))
-					APP_next_freq();  
+					APP_next_freq();
 			}
 /*
 			if (g_scan_next_channel <= USER_CHANNEL_LAST)
 			{	// channel mode
-		
+
 				if (g_current_code_type == CODE_TYPE_NONE && g_current_function == FUNCTION_NEW_RECEIVE && !g_scan_pause_time_mode)
 				{
 					APP_start_listening(g_monitor_enabled ? FUNCTION_MONITOR : FUNCTION_RECEIVE, true);
@@ -1208,13 +1225,13 @@ void APP_process(void)
 				{	// switch to next channel
 					g_scan_pause_time_mode = false;
 					g_rx_reception_mode    = RX_MODE_NONE;
-					APP_next_channel();    
+					APP_next_channel();
 				}
 			}
 			else
 			if (IS_FREQ_CHANNEL(g_scan_next_channel))
 			{	// frequency mode
-		
+
 				if (g_current_function == FUNCTION_NEW_RECEIVE && !g_scan_pause_time_mode)
 				{
 					APP_start_listening(g_monitor_enabled ? FUNCTION_MONITOR : FUNCTION_RECEIVE, true);
@@ -1223,7 +1240,7 @@ void APP_process(void)
 				{	// switch to next frequency
 					g_scan_pause_time_mode = false;
 					g_rx_reception_mode    = RX_MODE_NONE;
-					APP_next_freq();  
+					APP_next_freq();
 				}
 			}
 */
@@ -1797,7 +1814,7 @@ void APP_time_slice_10ms(void)
 						RADIO_enableTX(false);
 						BK4819_TransmitTone(true, 500);
 						SYSTEM_DelayMs(2);
-						
+
 						GPIO_SetBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
 						g_speaker_enabled = true;
 
@@ -2435,7 +2452,7 @@ void APP_time_slice_500ms(void)
 			RADIO_tx_eot();
 			RADIO_EnableCxCSS();
 		}
-		
+
 		#ifdef ENABLE_VOX
 			g_vox_resume_count_down = 80;
 		#endif
@@ -2464,7 +2481,7 @@ void APP_channel_next(const bool remember_current, const scan_state_dir_t scan_d
 		g_scan_restore_channel   = 0xff;
 		g_scan_restore_frequency = 0xffffffff;
 	}
-	
+
 	#if defined(ENABLE_UART) && defined(ENABLE_UART_DEBUG)
 		UART_printf("APP_channel_next %u\r\n", g_scan_next_channel);
 	#endif
@@ -2476,7 +2493,7 @@ void APP_channel_next(const bool remember_current, const scan_state_dir_t scan_d
 		APP_next_channel();
 	}
 	else
-	if (IS_FREQ_CHANNEL(g_scan_next_channel))  
+	if (IS_FREQ_CHANNEL(g_scan_next_channel))
 	{	// frequency mode
 		if (remember_current)
 			g_scan_restore_frequency = g_rx_vfo->freq_config_rx.frequency;

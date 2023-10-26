@@ -38,13 +38,14 @@ ENABLE_PWRON_PASSWORD            := 0
 ENABLE_RESET_AES_KEY             := 0
 ENABLE_BIG_FREQ                  := 1
 ENABLE_SMALL_BOLD                := 0
+# trim trailing 44B
 ENABLE_TRIM_TRAILING_ZEROS       := 0
 ENABLE_KEEP_MEM_NAME             := 1
 ENABLE_WIDE_RX                   := 0
 ENABLE_TX_WHEN_AM                := 0
 ENABLE_F_CAL_MENU                := 0
 ENABLE_TX_UNLOCK                 := 0
-ENABLE_CTCSS_TAIL_PHASE_SHIFT    := 0
+ENABLE_CTCSS_TAIL_PHASE_SHIFT    := 1
 ENABLE_CONTRAST                  := 0
 ENABLE_BOOT_BEEPS                := 0
 ENABLE_DTMF_CALL_FLASH_LIGHT     := 0
@@ -57,7 +58,7 @@ ENABLE_KILL_REVIVE               := 0
 # AM Fix 0.8 kB
 ENABLE_AM_FIX                    := 1
 ENABLE_AM_FIX_SHOW_DATA          := 0
-ENABLE_SQUELCH_MORE_SENSITIVE    := 1
+ENABLE_SQUELCH_MORE_SENSITIVE    := 0
 ENABLE_SQ_OPEN_WITH_UP_DN_BUTTS  := 1
 ENABLE_FASTER_CHANNEL_SCAN       := 1
 ENABLE_COPY_CHAN_TO_VFO_TO_CHAN  := 1
@@ -70,7 +71,7 @@ ENABLE_TX_AUDIO_BAR              := 0
 # Side Button Menu 0.3 kB
 ENABLE_SIDE_BUTT_MENU            := 0
 # Key Lock 0.4 kB
-ENABLE_KEYLOCK                   := 1
+ENABLE_KEYLOCK                   := 0
 #ENABLE_PANADAPTER               := 0
 #ENABLE_SINGLE_VFO_CHAN          := 0
 
@@ -101,7 +102,7 @@ ifeq ($(ENABLE_LTO),1)
 	ENABLE_OVERLAY := 0
 endif
 
-ifeq ($(filter $(ENABLE_FMRADIO_76_90) $(ENABLE_FMRADIO_76_108) $(ENABLE_FMRADIO_875_108) $(ENABLE_FMRADIO_875_108), 1), 1)
+ifeq ($(filter $(ENABLE_FMRADIO_76_90) $(ENABLE_FMRADIO_68_108) $(ENABLE_FMRADIO_76_108) $(ENABLE_FMRADIO_875_108), 1), 1)
 	ENABLE_FMRADIO := 1
 else
 	ENABLE_FMRADIO := 0

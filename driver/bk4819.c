@@ -53,8 +53,8 @@ void BK4819_Init(void)
 	BK4819_WriteRegister(0x37, 0x1D0F);
 	BK4819_WriteRegister(0x36, 0x0022);
 
-//	BK4819_DisableAGC();
-	BK4819_EnableAGC();
+	BK4819_DisableAGC();
+//	BK4819_EnableAGC();
 
 	BK4819_WriteRegister(0x19, 0x1041);  // 0001 0000 0100 0001 <15> MIC AGC  1 = disable  0 = enable
 
@@ -121,6 +121,7 @@ void BK4819_Init(void)
 //	BK4819_WriteRegister(0x37, 0x1D0F);
 
 //	DisableAGC(0);
+
 	BK4819_WriteRegister(0x13, 0x03BE);
 	BK4819_WriteRegister(0x12, 0x037B);
 	BK4819_WriteRegister(0x11, 0x027B);
@@ -311,7 +312,7 @@ void BK4819_DisableAGC(void)
 	//         1 = -27dB
 	//         0 = -33dB
 	//
-	BK4819_WriteRegister(0x13, (3u << 8) | (2u << 5) | (3u << 3) | (6u << 0));  // 000000 11 101 11 110
+	BK4819_WriteRegister(0x13, (3u << 8) | (5u << 5) | (3u << 3) | (6u << 0));  // 000000 11 101 11 110
 	BK4819_WriteRegister(0x12, 0x037B);  // 000000 11 011 11 011
 	BK4819_WriteRegister(0x11, 0x027B);  // 000000 10 011 11 011
 	BK4819_WriteRegister(0x10, 0x007A);  // 000000 00 011 11 010
@@ -350,7 +351,7 @@ void BK4819_EnableAGC(void)
 		(5u <<  3) |      // 5  DC Filter band width for Tx (MIC In)
 		(6u <<  0));      // 6  DC Filter band width for Rx (I.F In)
 
-	BK4819_WriteRegister(0x13, (3u << 8) | (2u << 5) | (3u << 3) | (6u << 0));  // 000000 11 101 11 110
+	BK4819_WriteRegister(0x13, (3u << 8) | (5u << 5) | (3u << 3) | (6u << 0));  // 000000 11 101 11 110
     BK4819_WriteRegister(0x12, 0x037C);
     BK4819_WriteRegister(0x11, 0x027B);
     BK4819_WriteRegister(0x10, 0x007A);
@@ -1174,7 +1175,8 @@ void BK4819_TxOn_Beep(void)
 {
 	BK4819_WriteRegister(0x37, 0x1D0F);
 	BK4819_WriteRegister(0x52, 0x028F);
-	BK4819_WriteRegister(0x30, 0x0000);
+
+	BK4819_WriteRegister(0x30, 0);
 	BK4819_WriteRegister(0x30, 0xC1FE);
 }
 
@@ -1217,7 +1219,7 @@ void BK4819_ExitSubAu(void)
 	//       0   = min
 	//       127 = max
 	//
-	BK4819_WriteRegister(0x51, 0x0000);
+	BK4819_WriteRegister(0x51, 0);
 }
 
 void BK4819_Conditional_RX_TurnOn_and_GPIO6_Enable(void)
@@ -1969,15 +1971,24 @@ void BK4819_start_fsk_rx(const unsigned int packet_size)
 
 #ifdef ENABLE_MDC1200
 
-void BK4819_PlayRogerMDC1200(void)
+void BK4819_send_MDC1200(const uint8_t op, const uint8_t arg, const uint16_t id)
 {
 	uint16_t fsk_reg59;
 	uint8_t  packet[42];
 
-	const uint8_t  op  = MDC1200_OP_CODE_POST_ID;
-	const uint8_t  arg = 0x80;
-	const uint16_t id  = 0xB183;
-
+	// REG_51
+	//
+	// <15>  1 = Enable TxCTCSS/CDCSS
+	//       0 = Disable
+	//
+	const bool code_enabled = (BK4819_ReadRegister(0x51) & (1u << 15)) ? true : false;
+	if (code_enabled)
+	{	// need to turn off CTCSS/CDCSS
+		BK4819_WriteRegister(0x51, BK4819_ReadRegister(0x51) & ~(1u << 15));
+//		BK4819_ExitSubAu();
+		SYSTEM_DelayMs(10);
+	}
+	
 	// create the MDC1200 packet
 	const unsigned int size = MDC1200_encode_single_packet(packet, op, arg, id);
 
@@ -2116,7 +2127,7 @@ void BK4819_PlayRogerMDC1200(void)
 				(0u <<  9) |   // 0 ~ 1   1 = invert data when TX
 				(0u <<  8) |   // 0 ~ 1   ???
 				(0u <<  4) |   // 0 ~ 15  preamble length
-				(0u <<  3) |   // 0 ~ 1       sync length
+				(1u <<  3) |   // 0 ~ 1       sync length
 				(0u <<  0);    // 0 ~ 7   ???
 
 	// Set entire packet length (not including the pre-amble and sync bytes we can't seem to disable)
@@ -2137,7 +2148,7 @@ void BK4819_PlayRogerMDC1200(void)
 	// <15:8> 0x55 FSK Sync Byte 2 (Sync Byte 0 first, then 1,2,3)
 	// <7:0>  0xAA FSK Sync Byte 3
 	//
-	BK4819_WriteRegister(0x5B, 0x0000);                   // bytes 2 & 3 (not used)
+	BK4819_WriteRegister(0x5B, 0x0000);                   // bytes 2 & 3
 
 	// CRC setting (plus other stuff we don't know what)
 	//
@@ -2195,6 +2206,9 @@ void BK4819_PlayRogerMDC1200(void)
 	BK4819_WriteRegister(0x3F, 0);   // disable interrupts
 	BK4819_WriteRegister(0x70, 0);
 	BK4819_WriteRegister(0x58, 0);
+
+	if (code_enabled)
+		BK4819_WriteRegister(0x51, BK4819_ReadRegister(0x51) | (1u << 15));
 }
 
 #endif

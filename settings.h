@@ -149,7 +149,11 @@ typedef struct {
 	uint8_t  unused2:2;                      //
 	// [11]
 	uint8_t  tx_offset_dir:2;                //
-	uint8_t  unused3:2;                      //
+	#ifdef ENABLE_MDC1200
+		uint8_t mdc1200_mode:2;              //
+	#else
+		uint8_t unused3:2;                   //
+	#endif
 	uint8_t  am_mode:1;                      //
 	uint8_t  unused4:3;                      //
 	// [12]
@@ -334,7 +338,12 @@ typedef struct {
 	uint8_t        auto_key_lock;                   //
 	uint8_t        display_mode;                    //
 	uint32_t       power_on_password;               //
-	uint8_t        unused6[4];                      // 0xff's
+	#ifdef ENABLE_MDC1200
+		uint16_t   mdc1200_id;                      // 1of11
+		uint8_t    unused6[2];                      // 0xff's
+	#else
+		uint8_t    unused6[4];                      // 0xff's
+	#endif
 
 	// 0x0EA0
 	uint8_t        voice_prompt;                    //
@@ -499,6 +508,10 @@ typedef struct {
 	bool                  scan_list_enabled[2];
 	uint8_t               scan_list_priority_ch1[2];
 	uint8_t               scan_list_priority_ch2[2];
+
+	#ifdef ENABLE_MDC1200
+		uint16_t          mdc1200_id;
+	#endif
 
 	bool                  auto_keypad_lock;
 

@@ -32,6 +32,9 @@
 #include "frequencies.h"
 #include "functions.h"
 #include "helper/battery.h"
+#ifdef ENABLE_MDC1200
+	#include "mdc1200.h"
+#endif
 #include "misc.h"
 #include "radio.h"
 #include "settings.h"
@@ -296,6 +299,10 @@ void RADIO_configure_channel(const unsigned int VFO, const unsigned int configur
 				p_vfo->freq_config_tx.code      = (m_channel.tx_ctcss_cdcss_code < ARRAY_SIZE(DCS_OPTIONS)) ? m_channel.tx_ctcss_cdcss_code : 0;
 				break;
 		}
+
+		#ifdef ENABLE_MDC1200
+			p_vfo->mdc1200_mode = m_channel.mdc1200_mode;
+		#endif
 
 		p_vfo->frequency_reverse = m_channel.frequency_reverse ? true : false;
 		p_vfo->channel_bandwidth = m_channel.channel_bandwidth ? true : false;
@@ -843,11 +850,11 @@ void RADIO_enableTX(const bool fsk_tx)
 {
 	BK4819_filter_bandwidth_t Bandwidth = g_current_vfo->channel_bandwidth;
 
+	// disable the speaker
 	GPIO_ClearBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
-
 	g_speaker_enabled = false;
 
-	BK4819_set_GPIO_pin(BK4819_GPIO0_PIN28_RX_ENABLE, false);     // ???
+	BK4819_set_GPIO_pin(BK4819_GPIO0_PIN28_RX_ENABLE, false);
 
 	#pragma GCC diagnostic push
 	#pragma GCC diagnostic ignored "-Wimplicit-fallthrough="
@@ -1118,15 +1125,22 @@ void RADIO_tx_eot(void)
 	}
 	else
 	if (g_eeprom.roger_mode == ROGER_MODE_ROGER)
+	{
 		BK4819_PlayRoger();
+	}
 	else
 #ifdef ENABLE_MDC1200
-	if (g_eeprom.roger_mode == ROGER_MODE_MDC)
-		BK4819_PlayRogerMDC1200();
+//	if (g_eeprom.roger_mode == ROGER_MODE_MDC)
+	if (g_current_vfo->mdc1200_mode == MDC1200_MODE_EOT || g_current_vfo->mdc1200_mode == MDC1200_MODE_BOTH)
+	{
+		BK4819_send_MDC1200(MDC1200_OP_CODE_POST_ID, 0x00, g_eeprom.mdc1200_id);
+	}
 	else
 #endif
 	if (g_current_vfo->dtmf_ptt_id_tx_mode == PTT_ID_APOLLO)
+	{
 		BK4819_PlayTone(APOLLO_TONE2_HZ, APOLLO_TONE_MS, 28);
-
+	}
+	
 	BK4819_ExitDTMF_TX(true);
 }
