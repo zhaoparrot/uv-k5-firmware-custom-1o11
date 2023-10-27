@@ -1032,7 +1032,7 @@ void APP_process_radio_interrupts(void)
 
 		if (interrupt_bits & BK4819_REG_02_SQUELCH_OPENED)
 		{
-//			BK4819_set_GPIO_pin(BK4819_GPIO6_PIN2_GREEN, true);   // LED on
+			BK4819_set_GPIO_pin(BK4819_GPIO6_PIN2_GREEN, true);   // LED on
 			g_squelch_open = true;
 
 			#if defined(ENABLE_UART) && defined(ENABLE_UART_DEBUG)

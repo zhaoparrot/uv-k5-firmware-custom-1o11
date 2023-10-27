@@ -580,7 +580,7 @@ void UI_DisplayMain(void)
 				#endif
 					LastIncomeChannel = g_eeprom.rx_vfo;
 					// invert the text pixels
-					for (int i = 13; i < 14 + (8 * 2); i++)
+					for (int i = 12; i < 13 + (8 * 2); i++)
 					{
 						g_frame_buffer[line][i] ^= 0xFF;
 					}
