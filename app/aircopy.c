@@ -88,7 +88,7 @@ void AIRCOPY_init(void)
 
 	g_fsk_write_index = 0;
 	BK4819_set_GPIO_pin(BK4819_GPIO6_PIN2_GREEN, false);  // LED off
-	BK4819_start_fsk_rx(AIRCOPY_DATA_PACKET_SIZE);
+	BK4819_start_aircopy_fsk_rx(AIRCOPY_DATA_PACKET_SIZE);
 
 	GUI_SelectNextDisplay(DISPLAY_AIRCOPY);
 }
@@ -133,6 +133,34 @@ void AIRCOPY_start_fsk_tx(const int request_block_num)
 
 	// turn the TX on
 	RADIO_enableTX(true);
+
+	// REG_2B   0
+	//
+	// <10>     0 AF RX HPF 300Hz filter
+	//          0 = enable
+	//          1 = disable
+	//
+	// <9>      0 AF RX LPF 3kHz filter
+	//          0 = enable
+	//          1 = disable
+	//
+	// <8>      0 AF RX de-emphasis filter
+	//          0 = enable
+	//          1 = disable
+	//
+	// <2>      0 AF TX HPF 300Hz filter
+	//          0 = enable
+	//          1 = disable
+	//
+	// <1>      0 AF TX LPF filter
+	//          0 = enable
+	//          1 = disable
+	//
+	// <0>      0 AF TX pre-emphasis filter
+	//          0 = enable
+	//          1 = disable
+	//
+//	BK4819_WriteRegister(0x2B, (1u << 2) | (1u << 0));  // try to improve the TX waveform
 
 	// REG_59
 	//
@@ -217,6 +245,9 @@ void AIRCOPY_stop_fsk_tx(void)
 
 	BK4819_reset_fsk();
 
+	// restore TX/RX filtering
+	BK4819_WriteRegister(0x2B, 0);
+
 	if (g_aircopy_state == AIRCOPY_TX)
 	{
 		g_aircopy_block_number++;
@@ -281,13 +312,13 @@ void AIRCOPY_process_fsk_tx_10ms(void)
 	if (g_aircopy_state == AIRCOPY_RX)
 	{
 		g_fsk_write_index = 0;
-		BK4819_start_fsk_rx(AIRCOPY_DATA_PACKET_SIZE);
+		BK4819_start_aircopy_fsk_rx(AIRCOPY_DATA_PACKET_SIZE);
 	}
 	else
 	if (g_aircopy_state == AIRCOPY_TX)
 	{
 		g_fsk_write_index = 0;
-		BK4819_start_fsk_rx(AIRCOPY_REQ_PACKET_SIZE);
+		BK4819_start_aircopy_fsk_rx(AIRCOPY_REQ_PACKET_SIZE);
 	}
 }
 
@@ -352,7 +383,7 @@ void AIRCOPY_process_fsk_rx_10ms(void)
 	{	// FSK RX is disabled, enable it
 		g_fsk_write_index = 0;
 		BK4819_set_GPIO_pin(BK4819_GPIO6_PIN2_GREEN, false);  // LED off
-		BK4819_start_fsk_rx((g_aircopy_state == AIRCOPY_TX) ? AIRCOPY_REQ_PACKET_SIZE : AIRCOPY_DATA_PACKET_SIZE);
+		BK4819_start_aircopy_fsk_rx((g_aircopy_state == AIRCOPY_TX) ? AIRCOPY_REQ_PACKET_SIZE : AIRCOPY_DATA_PACKET_SIZE);
 	}
 
 	status = BK4819_ReadRegister(0x0C);
@@ -415,7 +446,7 @@ void AIRCOPY_process_fsk_rx_10ms(void)
 
 	// restart the RX
 	BK4819_set_GPIO_pin(BK4819_GPIO6_PIN2_GREEN, false);     // LED off
-	BK4819_start_fsk_rx((g_aircopy_state == AIRCOPY_TX) ? AIRCOPY_REQ_PACKET_SIZE : AIRCOPY_DATA_PACKET_SIZE);
+	BK4819_start_aircopy_fsk_rx((g_aircopy_state == AIRCOPY_TX) ? AIRCOPY_REQ_PACKET_SIZE : AIRCOPY_DATA_PACKET_SIZE);
 
 	g_update_display = true;
 
@@ -601,7 +632,7 @@ send_req:
 	}
 	AIRCOPY_stop_fsk_tx();
 
-	BK4819_start_fsk_rx(AIRCOPY_DATA_PACKET_SIZE);
+	BK4819_start_aircopy_fsk_rx(AIRCOPY_DATA_PACKET_SIZE);
 }
 
 static void AIRCOPY_Key_DIGITS(key_code_t Key, bool key_pressed, bool key_held)
@@ -733,7 +764,7 @@ static void AIRCOPY_Key_EXIT(bool key_pressed, bool key_held)
 		g_aircopy_rx_errors_crc     = 0;
 		g_aircopy_state             = AIRCOPY_RX;
 
-		BK4819_start_fsk_rx(AIRCOPY_DATA_PACKET_SIZE);
+		BK4819_start_aircopy_fsk_rx(AIRCOPY_DATA_PACKET_SIZE);
 
 		g_update_display = true;
 		GUI_DisplayScreen();

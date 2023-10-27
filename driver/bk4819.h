@@ -76,7 +76,11 @@ void     BK4819_SetCDCSSCodeWord(uint32_t CodeWord);
 void     BK4819_SetCTCSSFrequency(uint32_t BaudRate);
 void     BK4819_SetTailDetection(const uint32_t freq_10Hz);
 void     BK4819_EnableVox(uint16_t Vox1Threshold, uint16_t Vox0Threshold);
+
+void     BK4819_set_TX_deviation(unsigned int level);
+
 void     BK4819_SetFilterBandwidth(const BK4819_filter_bandwidth_t Bandwidth, const bool weak_no_different);
+
 void     BK4819_SetupPowerAmplifier(const uint8_t bias, const uint32_t frequency);
 void     BK4819_set_rf_frequency(const uint32_t frequency, const bool trigger_update);
 void     BK4819_SetupSquelch(
@@ -106,9 +110,12 @@ void     BK4819_EnterTxMute(void);
 void     BK4819_ExitTxMute(void);
 void     BK4819_Sleep(void);
 void     BK4819_TurnsOffTones_TurnsOnRX(void);
+
 #ifdef ENABLE_AIRCOPY
-	void     BK4819_SetupAircopy(const unsigned int packet_size);
+	void BK4819_SetupAircopy(const unsigned int packet_size);
+	void BK4819_start_aircopy_fsk_rx(const unsigned int packet_size);
 #endif
+
 void     BK4819_reset_fsk(void);
 void     BK4819_Idle(void);
 void     BK4819_ExitBypass(void);
@@ -153,11 +160,10 @@ uint8_t  BK4819_get_CDCSS_code_type(void);
 uint8_t  BK4819_GetCTCShift(void);
 uint8_t  BK4819_GetCTCType(void);
 
-void     BK4819_start_fsk_rx(const unsigned int packet_size);
-
 void     BK4819_PlayRoger(void);
 
 #ifdef ENABLE_MDC1200
+	void BK4819_enable_mdc1200_rx(const bool enable);
 	void BK4819_send_MDC1200(const uint8_t op, const uint8_t arg, const uint16_t id);
 #endif
 
