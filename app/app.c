@@ -69,10 +69,10 @@
 
 // original QS front end register settings
 // 0x03BE   00000 011 101 11 110
-const uint8_t orig_lna_short = 3;   //   0dB
-const uint8_t orig_lna       = 5;   //  -4dB
-const uint8_t orig_mixer     = 3;   //   0dB
-const uint8_t orig_pga       = 6;   //  -3dB
+const uint8_t orig_lnas  = 3;   //   0dB
+const uint8_t orig_lna   = 5;   //  -4dB
+const uint8_t orig_mixer = 3;   //   0dB
+const uint8_t orig_pga   = 6;   //  -3dB
 
 static void APP_process_key(const key_code_t Key, const bool key_pressed, const bool key_held);
 
@@ -558,12 +558,6 @@ bool APP_start_listening(function_type_t Function, const bool reset_am_fix)
 #ifdef ENABLE_AM_FIX
 	{	// RF RX front end gain
 
-		// original setting
-		uint16_t lna_short = orig_lna_short;
-		uint16_t lna       = orig_lna;
-		uint16_t mixer     = orig_mixer;
-		uint16_t pga       = orig_pga;
-
 		if (g_rx_vfo->am_mode && g_setting_am_fix)
 		{	// AM RX mode
 			if (reset_am_fix)
@@ -571,8 +565,8 @@ bool APP_start_listening(function_type_t Function, const bool reset_am_fix)
 			AM_fix_10ms(chan);
 		}
 		else
-		{
-			BK4819_WriteRegister(0x13, (lna_short << 8) | (lna << 5) | (mixer << 3) | (pga << 0));
+		{	// original setting
+			BK4819_WriteRegister(0x13, (orig_lnas << 8) | (orig_lna << 5) | (orig_mixer << 3) | (orig_pga << 0));
 		}
 	}
 #else
@@ -1039,6 +1033,54 @@ void APP_process_radio_interrupts(void)
 				UART_printf("squelch opened\r\n");
 			#endif
 		}
+
+		#ifdef ENABLE_MDC1200
+		{
+			const uint16_t sync_flags = BK4819_ReadRegister(0x0B);
+			
+//			if (sync_flags & ((1u << 7) | (1u << 6)))
+//			{	// RX sync found (pos or neg version)
+//				#if defined(ENABLE_UART) && defined(ENABLE_UART_DEBUG)
+//					UART_printf("fsk rx sync\r\n");
+//				#endif
+//			}
+
+			if (sync_flags & (1u << 7))
+			{	// RX sync neg found
+				#if defined(ENABLE_UART) && defined(ENABLE_UART_DEBUG)
+					UART_printf("fsk rx sync neg\r\n");
+				#endif
+			}
+			
+			if (sync_flags & (1u << 6))
+			{	// RX sync pos found
+				#if defined(ENABLE_UART) && defined(ENABLE_UART_DEBUG)
+					UART_printf("fsk rx sync pos\r\n");
+				#endif
+			}
+
+			if (interrupt_bits & BK4819_REG_02_FSK_RX_SYNC)
+			{
+				#if defined(ENABLE_UART) && defined(ENABLE_UART_DEBUG)
+					UART_printf("fsk rx sync\r\n");
+				#endif
+			}
+			
+			if (interrupt_bits & BK4819_REG_02_FSK_RX_FINISHED)
+			{
+				#if defined(ENABLE_UART) && defined(ENABLE_UART_DEBUG)
+					UART_printf("fsk rx finished\r\n");
+				#endif
+			}
+			
+			if (interrupt_bits & BK4819_REG_02_FSK_FIFO_ALMOST_FULL)
+			{
+				#if defined(ENABLE_UART) && defined(ENABLE_UART_DEBUG)
+					UART_printf("fsk rx almost full\r\n");
+				#endif
+			}
+		}
+		#endif
 	}
 }
 
@@ -2732,7 +2774,6 @@ static void APP_process_key(const key_code_t Key, const bool key_pressed, const 
 					if (!key_pressed)
 					{
 						GPIO_ClearBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
-
 						g_speaker_enabled = false;
 
 						BK4819_ExitDTMF_TX(false);
