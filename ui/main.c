@@ -845,9 +845,16 @@ void UI_DisplayMain(void)
 		// ************
 
 		str[0] = '\0';
-		if (g_eeprom.vfo_info[vfo_num].am_mode)
-		{	// show the AM symbol
-			strcpy(str, "AM");
+		if (g_eeprom.vfo_info[vfo_num].am_mode > 0)
+		{
+			//strcpy(str, g_sub_menu_mod_mode[g_eeprom.vfo_info[vfo_num].am_mode]);
+			switch (g_eeprom.vfo_info[vfo_num].am_mode)
+			{
+				default:
+				case 0: strcpy(str, "FM"); break;
+				case 1: strcpy(str, "AM"); break;
+				case 2: strcpy(str, "DS"); break;
+			}
 		}
 		else
 		{	// or show the CTCSS/DCS symbol
@@ -862,7 +869,7 @@ void UI_DisplayMain(void)
 		#ifdef ENABLE_TX_WHEN_AM
 			if (state == VFO_STATE_NORMAL || state == VFO_STATE_ALARM)
 		#else
-			if ((state == VFO_STATE_NORMAL || state == VFO_STATE_ALARM) && !g_eeprom.vfo_info[vfo_num].am_mode) // not allowed to TX if in AM mode
+			if ((state == VFO_STATE_NORMAL || state == VFO_STATE_ALARM) && g_eeprom.vfo_info[vfo_num].am_mode == 0) // not allowed to TX if not in FM mode
 		#endif
 		{
 			if (FREQUENCY_tx_freq_check(g_eeprom.vfo_info[vfo_num].p_tx->frequency) == 0)
@@ -956,7 +963,7 @@ void UI_DisplayMain(void)
 
 		#if defined(ENABLE_AM_FIX) && defined(ENABLE_AM_FIX_SHOW_DATA)
 			// show the AM-FIX debug data
-			if (rx && g_eeprom.vfo_info[g_eeprom.rx_vfo].am_mode && g_setting_am_fix)
+			if (rx && g_eeprom.vfo_info[g_eeprom.rx_vfo].am_mode > 0 && g_setting_am_fix)
 			{
 				g_center_line = CENTER_LINE_AM_FIX_DATA;
 				AM_fix_print_data(g_eeprom.rx_vfo, str);
