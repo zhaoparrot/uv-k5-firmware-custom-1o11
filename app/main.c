@@ -33,20 +33,23 @@
 #include "bsp/dp32g030/gpio.h"
 #include "driver/bk4819.h"
 #include "driver/gpio.h"
-#include "driver/uart.h"
+#if defined(ENABLE_UART) && defined(ENABLE_UART_DEBUG)
+	#include "driver/uart.h"
+#endif
 #include "dtmf.h"
 #include "frequencies.h"
 #include "misc.h"
 #include "radio.h"
 #include "settings.h"
 #include "ui/inputbox.h"
-#include "ui/ui.h"
+#include "ui/main.h"
 #include "ui/menu.h"
+#include "ui/ui.h"
 
 bool scanning_paused(void)
 {
 	if ((g_scan_state_dir != SCAN_STATE_DIR_OFF || g_eeprom.dual_watch != DUAL_WATCH_OFF) &&
-	    g_scan_pause_10ms > 0 && g_scan_pause_10ms <= (200 / 10))
+	    g_scan_pause_tick_10ms > 0 && g_scan_pause_tick_10ms <= (200 / 10))
 	{	// scanning isn't paused
 		return false;
 	}
@@ -64,7 +67,7 @@ void toggle_chan_scanlist(void)
 		return;
 	}
 
-	if (g_screen_to_display != DISPLAY_MAIN     ||
+	if (g_current_display_screen != DISPLAY_MAIN     ||
 		g_current_function == FUNCTION_TRANSMIT ||
 		g_current_function == FUNCTION_PANADAPTER)
 	{
@@ -127,14 +130,19 @@ void toggle_chan_scanlist(void)
 			g_eeprom.tx_vfo                     = vfo;
 
 			RADIO_select_vfos();
-			RADIO_ApplyOffset(g_tx_vfo);
+			RADIO_ApplyOffset(g_tx_vfo, false);
 			RADIO_ConfigureSquelchAndOutputPower(g_tx_vfo);
+
 			RADIO_setup_registers(true);
 
 			// find the first channel that contains this frequency
 			g_tx_vfo->freq_in_channel = BOARD_find_channel(g_tx_vfo->freq_config_tx.frequency);
 
-			g_request_save_vfo = true;
+			SETTINGS_save_channel(g_tx_vfo->channel_save, g_eeprom.tx_vfo, g_tx_vfo, 1);
+
+			#if defined(ENABLE_UART) && defined(ENABLE_UART_DEBUG)
+				UART_printf("chan-vfo %u\r\n", g_tx_vfo->channel_save);
+			#endif
 
 			g_beep_to_play = BEEP_880HZ_60MS_TRIPLE_BEEP;
 			//g_beep_to_play = BEEP_1KHZ_60MS_OPTIONAL;
@@ -149,14 +157,14 @@ void toggle_chan_scanlist(void)
 			// search the channels to see if the frequency is already present
 			unsigned int chan = BOARD_find_channel(g_eeprom.vfo_info[vfo].p_tx->frequency);
 			if (chan > USER_CHANNEL_LAST)
-			{	// find next next free channel
+			{	// not found - find next free channel to save too
 				//for (chan = g_eeprom.screen_channel[vfo]; chan <= USER_CHANNEL_LAST; chan++)
 				for (chan = 0; chan <= USER_CHANNEL_LAST; chan++)
 					if (!RADIO_CheckValidChannel(chan, false, vfo))
 						break;
 			}
 
-			g_screen_to_display = DISPLAY_INVALID;
+			g_current_display_screen = DISPLAY_INVALID;
 			GUI_SelectNextDisplay(DISPLAY_MENU);
 			g_menu_cursor       = MENU_MEM_SAVE;
 			g_in_sub_menu    = true;
@@ -168,7 +176,7 @@ void toggle_chan_scanlist(void)
 
 				g_sub_menu_selection = chan;
 				g_flag_refresh_menu  = false;
-				g_screen_to_display  = DISPLAY_MENU;
+				g_current_display_screen  = DISPLAY_MENU;
 				g_update_display     = false;
 				UI_DisplayMenu();
 			}
@@ -187,7 +195,7 @@ void processFKeyFunction(const key_code_t Key)
 	uint8_t Band;
 	uint8_t Vfo = g_eeprom.tx_vfo;
 
-	if (g_current_function == FUNCTION_TRANSMIT || g_screen_to_display == DISPLAY_MENU)
+	if (g_current_function == FUNCTION_TRANSMIT || g_current_display_screen == DISPLAY_MENU)
 	{
 		g_beep_to_play = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
 		return;
@@ -200,16 +208,29 @@ void processFKeyFunction(const key_code_t Key)
 			if (g_scan_state_dir != SCAN_STATE_DIR_OFF)
 				APP_stop_scan();
 
-			#ifdef ENABLE_FMRADIO
-				ACTION_FM();
-			#else
+			if (g_fkey_pressed)
+			{
+				#if 0
+					g_tx_vfo->am_mode = (g_tx_vfo->am_mode + 1) & 1u;
+				#else
+					if (++g_tx_vfo->am_mode >= 3)
+						g_tx_vfo->am_mode = 0;
+				#endif
+				g_request_save_channel = 1;
+			}
+			else
+			{
+				#ifdef ENABLE_FMRADIO
+					ACTION_FM();
+				#else
 
 
-				// TODO: make use of this function key
+					// TODO: make use of this function key
 
 
-			#endif
-
+				#endif
+			}
+			
 			break;
 
 		case KEY_1:   // BAND
@@ -231,7 +252,7 @@ void processFKeyFunction(const key_code_t Key)
 			else
 				Band = BAND6_400MHz;      // jump to next band
 			g_tx_vfo->band = Band;
-
+	
 			g_eeprom.screen_channel[Vfo] = FREQ_CHANNEL_FIRST + Band;
 			g_eeprom.freq_channel[Vfo]   = FREQ_CHANNEL_FIRST + Band;
 
@@ -427,8 +448,8 @@ void MAIN_Key_DIGITS(key_code_t Key, bool key_pressed, bool key_held)
 	{	// key held down
 
 		if (key_pressed)
-		{	// and pressed
-			if (g_screen_to_display == DISPLAY_MAIN)
+		{
+			if (g_current_display_screen == DISPLAY_MAIN)
 			{
 				if (g_input_box_index > 0)
 				{	// clear the user box
@@ -436,10 +457,10 @@ void MAIN_Key_DIGITS(key_code_t Key, bool key_pressed, bool key_held)
 					g_request_display_screen = DISPLAY_MAIN;
 				}
 
+				processFKeyFunction(Key);
+
 				g_fkey_pressed  = false;
 				g_update_status = true;
-
-				processFKeyFunction(Key);
 			}
 		}
 
@@ -454,6 +475,7 @@ void MAIN_Key_DIGITS(key_code_t Key, bool key_pressed, bool key_held)
 
 	if (g_fkey_pressed)
 	{	// F-key was first pressed
+
 		processFKeyFunction(Key);
 
 		g_fkey_pressed  = false;
@@ -473,7 +495,9 @@ void MAIN_Key_DIGITS(key_code_t Key, bool key_pressed, bool key_held)
 
 	INPUTBOX_append(Key);
 
-	g_request_display_screen = DISPLAY_MAIN;
+	UI_DisplayMain();
+
+//	g_request_display_screen = DISPLAY_MAIN;
 
 	if (IS_USER_CHANNEL(g_tx_vfo->channel_save))
 	{	// user is entering channel number
@@ -483,9 +507,8 @@ void MAIN_Key_DIGITS(key_code_t Key, bool key_pressed, bool key_held)
 		if (g_input_box_index != 3)
 		{
 			#ifdef ENABLE_VOICE
-				g_another_voice_id   = (voice_id_t)Key;
+				g_another_voice_id = (voice_id_t)Key;
 			#endif
-			g_request_display_screen = DISPLAY_MAIN;
 			return;
 		}
 
@@ -500,7 +523,7 @@ void MAIN_Key_DIGITS(key_code_t Key, bool key_pressed, bool key_held)
 		}
 
 		#ifdef ENABLE_VOICE
-			g_another_voice_id        = (voice_id_t)Key;
+			g_another_voice_id = (voice_id_t)Key;
 		#endif
 
 		g_eeprom.user_channel[Vfo]    = (uint8_t)Channel;
@@ -508,6 +531,7 @@ void MAIN_Key_DIGITS(key_code_t Key, bool key_pressed, bool key_held)
 		g_request_save_vfo            = true;
 		g_vfo_configure_mode          = VFO_CONFIGURE_RELOAD;
 
+		g_update_display = true;
 		return;
 	}
 
@@ -521,7 +545,6 @@ void MAIN_Key_DIGITS(key_code_t Key, bool key_pressed, bool key_held)
 			#ifdef ENABLE_VOICE
 				g_another_voice_id = (voice_id_t)Key;
 			#endif
-
 			return;
 		}
 
@@ -578,6 +601,7 @@ void MAIN_Key_DIGITS(key_code_t Key, bool key_pressed, bool key_held)
 			g_request_save_channel = 1;
 			g_vfo_configure_mode   = VFO_CONFIGURE;
 
+			g_update_display = true;
 			return;
 		}
 
@@ -594,7 +618,7 @@ void MAIN_Key_DIGITS(key_code_t Key, bool key_pressed, bool key_held)
 				#ifdef ENABLE_VOICE
 					g_another_voice_id   = (voice_id_t)Key;
 				#endif
-				g_request_display_screen = DISPLAY_MAIN;
+//				g_request_display_screen = DISPLAY_MAIN;
 				return;
 			}
 
@@ -611,13 +635,16 @@ void MAIN_Key_DIGITS(key_code_t Key, bool key_pressed, bool key_held)
 				g_eeprom.screen_channel[Vfo] = Channel;
 				g_request_save_vfo           = true;
 				g_vfo_configure_mode         = VFO_CONFIGURE_RELOAD;
+				g_update_display             = true;
 				return;
 			}
 		}
 	#endif
 
-	g_request_display_screen = DISPLAY_MAIN;
-	g_beep_to_play           = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
+	g_beep_to_play = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
+
+	g_update_display = true;
+//	g_request_display_screen = DISPLAY_MAIN;
 }
 
 void MAIN_Key_EXIT(bool key_pressed, bool key_held)
@@ -671,18 +698,36 @@ void MAIN_Key_EXIT(bool key_pressed, bool key_held)
 		return;
 	}
 
-	if (key_held && key_pressed)
-	{	// exit key held down
-
-		if (g_input_box_index > 0 || g_dtmf_input_box_index > 0 || g_dtmf_input_mode)
-		{	// cancel key input mode (channel/frequency entry)
-			g_dtmf_input_mode       = false;
-			g_dtmf_input_box_index  = 0;
-			memset(g_dtmf_string, 0, sizeof(g_dtmf_string));
-			g_input_box_index        = 0;
-			g_request_display_screen = DISPLAY_MAIN;
-			g_beep_to_play           = BEEP_1KHZ_60MS_OPTIONAL;
+	if (!key_held)
+		return;
+	
+	if (key_pressed)
+		return;
+	
+	#ifdef ENABLE_FMRADIO
+		if (g_fm_radio_mode)
+		{
+			ACTION_FM();
+			return;
 		}
+	#endif
+		
+	if (g_input_box_index > 0 || g_dtmf_input_box_index > 0 || g_dtmf_input_mode)
+	{	// cancel key input mode (channel/frequency entry)
+		g_dtmf_input_mode       = false;
+		g_dtmf_input_box_index  = 0;
+		memset(g_dtmf_string, 0, sizeof(g_dtmf_string));
+		g_input_box_index        = 0;
+		g_request_display_screen = DISPLAY_MAIN;
+		g_beep_to_play           = BEEP_1KHZ_60MS_OPTIONAL;
+		return;
+	}
+
+	if (g_flash_light_state != FLASHLIGHT_OFF && g_flash_light_state != FLASHLIGHT_SOS)
+	{	// the the flash light off
+		g_flash_light_state = FLASHLIGHT_OFF;
+		GPIO_ClearBit(&GPIOC->DATA, GPIOC_PIN_FLASHLIGHT);
+		return;
 	}
 }
 
@@ -701,7 +746,7 @@ void MAIN_Key_MENU(const bool key_pressed, const bool key_held)
 
 			g_fkey_pressed = false;
 
-			if (g_screen_to_display == DISPLAY_MAIN)
+			if (g_current_display_screen == DISPLAY_MAIN)
 			{
 				if (g_input_box_index > 0)
 				{	// delete any inputted chars
@@ -773,7 +818,6 @@ void MAIN_Key_STAR(bool key_pressed, bool key_held)
 
 	if (g_scan_state_dir != SCAN_STATE_DIR_OFF || g_current_function == FUNCTION_TRANSMIT)
 	{	// RF scanning or TX'ing
-//		g_beep_to_play = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
 		return;
 	}
 
@@ -831,14 +875,17 @@ void MAIN_Key_UP_DOWN(bool key_pressed, bool key_held, scan_state_dir_t Directio
 
 	if (!key_pressed)
 	{
-		if (g_scan_state_dir == SCAN_STATE_DIR_OFF && IS_FREQ_CHANNEL(Channel))
-		{	// key released in frequency mode
+		if (g_scan_state_dir == SCAN_STATE_DIR_OFF &&
+		   (Channel <= USER_CHANNEL_LAST || IS_FREQ_CHANNEL(Channel)))
+		{	// key released
 
 			#ifdef ENABLE_SQ_OPEN_WITH_UP_DN_BUTTS
-				if (key_held && !monitor_was_enabled && g_current_function == FUNCTION_MONITOR)
+				if (key_held && !monitor_was_enabled)
 				{	// re-enable the squelch
-					APP_start_listening(FUNCTION_RECEIVE, false);
+
 					g_monitor_enabled = false;
+
+					APP_start_listening();
 				}
 			#endif
 
@@ -847,11 +894,12 @@ void MAIN_Key_UP_DOWN(bool key_pressed, bool key_held, scan_state_dir_t Directio
 			// find the first channel that contains this frequency
 			g_tx_vfo->freq_in_channel = BOARD_find_channel(g_tx_vfo->freq_config_rx.frequency);
 
-			// only update eeprom when the key is released - saves a LOT of wear and tear on the little eeprom
 			SETTINGS_save_channel(g_tx_vfo->channel_save, g_eeprom.tx_vfo, g_tx_vfo, 1);
 
+			RADIO_ApplyOffset(g_tx_vfo, true);
+			
 			#if defined(ENABLE_UART) && defined(ENABLE_UART_DEBUG)
-//				UART_printf("save chan\r\n");
+				UART_printf("save chan %u\r\n", g_tx_vfo->channel_save);
 			#endif
 		}
 	}
@@ -897,7 +945,7 @@ void MAIN_Key_UP_DOWN(bool key_pressed, bool key_held, scan_state_dir_t Directio
 			uint8_t Next;
 
 			if (IS_FREQ_CHANNEL(Channel))
-			{	// step/down in frequency
+			{	// frequency mode
 
 				frequency_band_t       new_band;
 				const frequency_band_t old_band  = FREQUENCY_GetBand(g_tx_vfo->freq_config_rx.frequency);
@@ -946,7 +994,7 @@ void MAIN_Key_UP_DOWN(bool key_pressed, bool key_held, scan_state_dir_t Directio
 						if (key_held && key_pressed && !monitor_was_enabled)
 						{	// open the squelch if the user holds the key down
 							g_monitor_enabled = true;
-							APP_start_listening(FUNCTION_MONITOR, false);
+							APP_start_listening();
 						}
 					#endif
 
@@ -957,9 +1005,20 @@ void MAIN_Key_UP_DOWN(bool key_pressed, bool key_held, scan_state_dir_t Directio
 				return;
 			}
 
-			// suppress audio click
-			GPIO_ClearBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
-			g_speaker_enabled = false;
+			// channel mode
+			
+			g_tx_vfo->freq_in_channel = 0xff;
+
+			#ifdef ENABLE_SQ_OPEN_WITH_UP_DN_BUTTS
+				if (!key_held && key_pressed)
+					monitor_was_enabled = g_monitor_enabled;
+				
+				if (key_held && key_pressed && !monitor_was_enabled)
+				{	// open the squelch if the user holds the key down
+					g_monitor_enabled = true;
+					APP_start_listening();
+				}
+			#endif
 
 			Next = RADIO_FindNextChannel(Channel + Direction, Direction, false, 0);
 			if (Next == 0xFF)
@@ -988,20 +1047,23 @@ void MAIN_Key_UP_DOWN(bool key_pressed, bool key_held, scan_state_dir_t Directio
 			}
 		#endif
 
-		g_request_save_vfo   = true;
+		if (!key_held && key_pressed)    // save when the user releases the button - save a LOT of eeprom wear
+			g_request_save_vfo = true;
+
 		g_vfo_configure_mode = VFO_CONFIGURE_RELOAD;
 
 		return;
 	}
 
+//	g_speaker_enabled = false;
+//	g_monitor_enabled = false;
 	GPIO_ClearBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
-	g_speaker_enabled = false;
 
 	// jump to the next channel
 	APP_channel_next(false, Direction);
 
 	// go NOW
-	g_scan_pause_10ms      = 0;   
+	g_scan_pause_tick_10ms = 0;   
 	g_scan_pause_time_mode = false;
 	g_squelch_open         = false;
 	g_rx_reception_mode    = RX_MODE_NONE;
@@ -1019,9 +1081,12 @@ void MAIN_process_key(key_code_t key, bool key_pressed, bool key_held)
 	#ifdef ENABLE_FMRADIO
 		if (g_fm_radio_mode && key != KEY_PTT && key != KEY_EXIT)
 		{
-			if (!key_held && key_pressed)
-				g_beep_to_play = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
-			return;
+			if (g_current_display_screen == DISPLAY_FM)
+			{
+				if (!key_held && key_pressed)
+					g_beep_to_play = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
+				return;
+			}
 		}
 	#endif
 
@@ -1060,10 +1125,10 @@ void MAIN_process_key(key_code_t key, bool key_pressed, bool key_held)
 			MAIN_Key_MENU(key_pressed, key_held);
 			break;
 		case KEY_UP:
-			MAIN_Key_UP_DOWN(key_pressed, key_held, 1);
+			MAIN_Key_UP_DOWN(key_pressed, key_held, SCAN_STATE_DIR_FORWARD);
 			break;
 		case KEY_DOWN:
-			MAIN_Key_UP_DOWN(key_pressed, key_held, -1);
+			MAIN_Key_UP_DOWN(key_pressed, key_held, SCAN_STATE_DIR_REVERSE);
 			break;
 		case KEY_EXIT:
 			MAIN_Key_EXIT(key_pressed, key_held);

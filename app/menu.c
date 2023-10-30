@@ -32,7 +32,9 @@
 #include "driver/gpio.h"
 #include "driver/keyboard.h"
 #include "driver/st7565.h"
-#include "driver/uart.h"
+#if defined(ENABLE_UART) && defined(ENABLE_UART_DEBUG)
+	#include "driver/uart.h"
+#endif
 #include "frequencies.h"
 #include "helper/battery.h"
 #include "misc.h"
@@ -84,7 +86,7 @@ void MENU_start_css_scan(int8_t Direction)
 
 	MENU_SelectNextCode();
 
-	g_scan_pause_10ms = scan_pause_css_10ms;
+	g_scan_pause_tick_10ms = scan_pause_css_10ms;
 }
 
 void MENU_stop_css_scan(void)
@@ -255,9 +257,13 @@ int MENU_GetLimits(uint8_t Cursor, int32_t *pMin, int32_t *pMax)
 		case MENU_DTMF_ST:
 		case MENU_DTMF_DCD:
 		case MENU_DTMF_LIVE_DEC:
-		case MENU_MOD_MODE:
 			*pMin = 0;
 			*pMax = ARRAY_SIZE(g_sub_menu_off_on) - 1;
+			break;
+
+		case MENU_MOD_MODE:
+			*pMin = 0;
+			*pMax = ARRAY_SIZE(g_sub_menu_mod_mode) - 1;
 			break;
 
 		#ifdef ENABLE_NOAA
@@ -456,11 +462,11 @@ void MENU_AcceptSetting(void)
 			g_request_save_channel = 1;
 			return;
 
-		#pragma GCC diagnostic push
-		#pragma GCC diagnostic ignored "-Wimplicit-fallthrough="
-
 		case MENU_TX_CTCSS:
 			pConfig = &g_tx_vfo->freq_config_tx;
+
+			// Fallthrough
+
 		case MENU_RX_CTCSS:
 			if (g_sub_menu_selection == 0)
 			{
@@ -486,8 +492,6 @@ void MENU_AcceptSetting(void)
 
 			g_request_save_channel = 1;
 			return;
-
-		#pragma GCC diagnostic pop
 
 		case MENU_SHIFT_DIR:
 			g_tx_vfo->tx_offset_freq_dir = g_sub_menu_selection;
@@ -558,7 +562,7 @@ void MENU_AcceptSetting(void)
 				g_eeprom.vox_switch = g_sub_menu_selection != 0;
 				if (g_eeprom.vox_switch)
 					g_eeprom.vox_level = g_sub_menu_selection - 1;
-				BOARD_EEPROM_LoadCalibration();
+				BOARD_eeprom_loadCalibration();
 				g_flag_reconfigure_vfos = true;
 				g_update_status         = true;
 				break;
@@ -628,7 +632,7 @@ void MENU_AcceptSetting(void)
 		#ifdef ENABLE_KEYLOCK
 		case MENU_AUTO_KEY_LOCK:
 			g_eeprom.auto_keypad_lock   = g_sub_menu_selection;
-			g_key_lock_count_down_500ms = key_lock_timeout_500ms;
+			g_key_lock_tick_500ms = key_lock_timeout_500ms;
 			break;
 		#endif
 
@@ -656,7 +660,7 @@ void MENU_AcceptSetting(void)
 
 		case MENU_MIC_GAIN:
 			g_eeprom.mic_sensitivity = g_sub_menu_selection;
-			BOARD_EEPROM_LoadCalibration();
+			BOARD_eeprom_loadCalibration();
 			g_flag_reconfigure_vfos = true;
 			break;
 
@@ -939,7 +943,7 @@ void MENU_SelectNextCode(void)
 
 	RADIO_setup_registers(true);
 
-	g_scan_pause_10ms = (g_selected_code_type == CODE_TYPE_CONTINUOUS_TONE) ? scan_pause_ctcss_10ms : scan_pause_cdcss_10ms;
+	g_scan_pause_tick_10ms = (g_selected_code_type == CODE_TYPE_CONTINUOUS_TONE) ? scan_pause_ctcss_10ms : scan_pause_cdcss_10ms;
 
 	g_update_display = true;
 }
@@ -1367,7 +1371,7 @@ static void MENU_Key_0_to_9(key_code_t Key, bool key_pressed, bool key_held)
 		{
 			#pragma GCC diagnostic push
 			#pragma GCC diagnostic ignored "-Wtype-limits"
-
+	
 			if (Key >= KEY_0 && Key <= KEY_9)
 			{
 				g_edit[g_edit_index] = '0' + Key - KEY_0;
@@ -1393,9 +1397,6 @@ static void MENU_Key_0_to_9(key_code_t Key, bool key_pressed, bool key_held)
 
 	if (!g_in_sub_menu)
 	{
-		#pragma GCC diagnostic push
-		#pragma GCC diagnostic ignored "-Wimplicit-fallthrough="
-
 		switch (g_input_box_index)
 		{
 			case 2:
@@ -1416,6 +1417,8 @@ static void MENU_Key_0_to_9(key_code_t Key, bool key_pressed, bool key_held)
 				g_input_box[0]    = g_input_box[1];
 				g_input_box_index = 1;
 
+			// Fallthrough
+
 			case 1:
 				value = g_input_box[0];
 				if (value > 0 && value <= g_menu_list_count)
@@ -1426,8 +1429,6 @@ static void MENU_Key_0_to_9(key_code_t Key, bool key_pressed, bool key_held)
 				}
 				break;
 		}
-
-		#pragma GCC diagnostic pop
 
 		g_input_box_index = 0;
 
@@ -1889,14 +1890,11 @@ static void MENU_Key_UP_DOWN(bool key_pressed, bool key_held, int8_t Direction)
 
 	VFO = 0;
 
-	#pragma GCC diagnostic push
-	#pragma GCC diagnostic ignored "-Wimplicit-fallthrough="
-
 	switch (g_menu_cursor)
 	{
 		case MENU_OFFSET:
 		{
-			const int32_t max_freq = 100000000;
+			const int32_t max_freq = MAX_TX_OFFSET;
 			const int32_t step_size = g_tx_vfo->step_freq;
 			int32_t offset = (int32_t)g_sub_menu_selection + (Direction * step_size);
 			
@@ -1930,6 +1928,9 @@ static void MENU_Key_UP_DOWN(bool key_pressed, bool key_held, int8_t Direction)
 
 		case MENU_SLIST2:
 			VFO = 1;
+
+			// Fallthrough
+
 		case MENU_SLIST1:
 			bCheckScanList = true;
 			break;
@@ -1939,8 +1940,6 @@ static void MENU_Key_UP_DOWN(bool key_pressed, bool key_held, int8_t Direction)
 			g_request_display_screen = DISPLAY_MENU;
 			return;
 	}
-
-	#pragma GCC diagnostic pop
 
 	Channel = RADIO_FindNextChannel(g_sub_menu_selection + Direction, Direction, bCheckScanList, VFO);
 	if (Channel != 0xFF)
@@ -2011,7 +2010,7 @@ void MENU_process_key(key_code_t Key, bool key_pressed, bool key_held)
 			break;
 	}
 
-	if (g_screen_to_display == DISPLAY_MENU)
+	if (g_current_display_screen == DISPLAY_MENU)
 	{
 		if (g_menu_cursor == MENU_VOLTAGE ||
 #ifdef ENABLE_F_CAL_MENU
@@ -2019,11 +2018,11 @@ void MENU_process_key(key_code_t Key, bool key_pressed, bool key_held)
 #endif
 			g_menu_cursor == MENU_BAT_CAL)
 		{
-			g_menu_count_down = menu_timeout_long_500ms;
+			g_menu_tick_10ms = menu_timeout_long_500ms;
 		}
 		else
 		{
-			g_menu_count_down = menu_timeout_500ms;
+			g_menu_tick_10ms = menu_timeout_500ms;
 		}
 	}
 }

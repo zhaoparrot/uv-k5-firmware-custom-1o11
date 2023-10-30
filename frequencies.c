@@ -14,7 +14,9 @@
  *     limitations under the License.
  */
 
-#include "driver/uart.h"
+#if defined(ENABLE_UART) && defined(ENABLE_UART_DEBUG)
+	#include "driver/uart.h"
+#endif
 #include "frequencies.h"
 #include "misc.h"
 #include "settings.h"
@@ -25,10 +27,10 @@ uint32_t g_aircopy_freq = 41002500;
 const freq_band_table_t AIR_BAND = {10800000, 13700000};
 
 // FM broadcast band lower/upper limit
-#if   defined(ENABLE_FMRADIO_76_90)
-	const freq_band_table_t FM_RADIO_BAND = {760, 900};
-#elif defined(ENABLE_FMRADIO_68_108)
-	const freq_band_table_t FM_RADIO_BAND = {680, 1080};
+#if   defined(ENABLE_FMRADIO_64_76)
+	const freq_band_table_t FM_RADIO_BAND = {640,  760};
+#elif defined(ENABLE_FMRADIO_76_90)
+	const freq_band_table_t FM_RADIO_BAND = {760,  900};
 #elif defined(ENABLE_FMRADIO_76_108)
 	const freq_band_table_t FM_RADIO_BAND = {760, 1080};
 #elif defined(ENABLE_FMRADIO_875_108)
@@ -78,11 +80,15 @@ const freq_band_table_t FREQ_BAND_TABLE[7] =
 	};
 #endif
 
-// the first 7 values MUST remain in those same positions (to remain compatible with the QS config windows software)
+// the first 7 values MUST remain in those same positions
+// so as to remain compatible with the QS config software
+//
 const uint16_t STEP_FREQ_TABLE[21] = {
 	250, 500, 625, 1000, 1250, 2500, 833,
 	1, 5, 10, 25, 50, 100, 125, 1500, 3000, 5000, 10000, 12500, 25000, 50000
 };
+
+// the above step sizes will be sorted to appear to be in order to the user
 uint16_t step_freq_table_sorted[ARRAY_SIZE(STEP_FREQ_TABLE)];
 
 unsigned int FREQUENCY_get_step_index(const unsigned int step_size)

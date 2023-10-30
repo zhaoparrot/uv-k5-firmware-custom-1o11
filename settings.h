@@ -63,10 +63,12 @@ enum {
 	DUAL_WATCH_CHAN_B
 };
 
+#define MAX_TX_OFFSET   100000000
 enum {
 	TX_OFFSET_FREQ_DIR_OFF = 0,
 	TX_OFFSET_FREQ_DIR_ADD,
-	TX_OFFSET_FREQ_DIR_SUB
+	TX_OFFSET_FREQ_DIR_SUB,
+	TX_OFFSET_FREQ_DIR_LAST
 };
 
 enum {
@@ -137,7 +139,7 @@ typedef struct {
 	// [0]
 	uint32_t frequency;                      //
 	// [4]
-	uint32_t offset;                         //
+	uint32_t tx_offset;                      //
 	// [8]
 	uint8_t  rx_ctcss_cdcss_code;            //
 	// [9]
@@ -154,8 +156,13 @@ typedef struct {
 	#else
 		uint8_t unused3:2;                   //
 	#endif
-	uint8_t  am_mode:1;                      //
-	uint8_t  unused4:3;                      //
+	#if 0
+		uint8_t  am_mode:1;                  //
+		uint8_t  unused4:3;                  //
+	#else
+		uint8_t  am_mode:2;                  //
+		uint8_t  unused4:2;                  //
+	#endif
 	// [12]
 	uint8_t  frequency_reverse:1;            // reverse repeater
 	uint8_t  channel_bandwidth:1;            // wide/narrow
@@ -325,7 +332,7 @@ typedef struct {
 	uint8_t        noaa_channel_b;                  //
 	uint8_t        fm_selected_frequency;           //
 	uint8_t        fm_selected_channel;             //
-	uint8_t        fm_is_channel_mode;              //
+	uint8_t        fm_channel_mode;              //
 	uint8_t        unused5[5];                      // 0xff's
 
 	// 0x0E90
@@ -481,7 +488,7 @@ typedef struct {
 	#ifdef ENABLE_FMRADIO
 		uint16_t          fm_selected_frequency;
 		uint8_t           fm_selected_channel;
-		bool              fm_is_channel_mode;
+		bool              fm_channel_mode;
 		uint16_t          fm_frequency_playing;
 	#endif
 

@@ -60,7 +60,9 @@ enum {
 enum {
 	FLASHLIGHT_OFF = 0,
 	FLASHLIGHT_ON,
-	FLASHLIGHT_BLINK
+	FLASHLIGHT_BLINK,
+	FLASHLIGHT_SOS,
+	FLASHLIGHT_LAST
 };
 
 enum {
@@ -110,11 +112,11 @@ typedef enum scan_state_dir_e scan_state_dir_t;
 
 extern const uint8_t         obfuscate_array[16];
 
-extern const uint8_t         fm_resume_countdown_500ms;
-extern const uint8_t         fm_radio_countdown_500ms;
-extern const uint16_t        fm_play_countdown_scan_10ms;
-extern const uint16_t        fm_play_countdown_noscan_10ms;
-extern const uint16_t        fm_restore_countdown_10ms;
+extern const uint8_t         fm_resume_500ms;
+extern const uint8_t         fm_radio_500ms;
+extern const uint16_t        fm_play_scan_10ms;
+extern const uint16_t        fm_play_noscan_10ms;
+extern const uint16_t        fm_restore_10ms;
 
 extern const uint8_t         menu_timeout_500ms;
 extern const uint16_t        menu_timeout_long_500ms;
@@ -123,10 +125,10 @@ extern const uint16_t        backlight_tx_rx_time_500ms;
 
 extern const uint8_t         dtmf_rx_live_timeout_500ms;
 extern const uint8_t         dtmf_rx_timeout_500ms;
-extern const uint8_t         dtmf_decode_ring_countdown_500ms;
-extern const uint8_t         dtmf_txstop_countdown_500ms;
+extern const uint8_t         dtmf_decode_ring_500ms;
+extern const uint8_t         dtmf_txstop_500ms;
 
-extern const uint8_t         serial_config_count_down_500ms;
+extern const uint8_t         serial_config_tick_500ms;
 
 extern const uint8_t         key_input_timeout_500ms;
 
@@ -147,12 +149,12 @@ extern const uint16_t        power_save1_10ms;
 extern const uint16_t        power_save2_10ms;
 
 #ifdef ENABLE_VOX
-	extern const uint16_t    vox_stop_count_down_10ms;
+	extern const uint16_t    vox_stop_10ms;
 #endif
 
-extern const uint16_t        noaa_count_down_10ms;
-extern const uint16_t        noaa_count_down_2_10ms;
-extern const uint16_t        noaa_count_down_3_10ms;
+extern const uint16_t        noaa_tick_10ms;
+extern const uint16_t        noaa_tick_2_10ms;
+extern const uint16_t        noaa_tick_3_10ms;
 
 #ifdef ENABLE_VOX
 	extern const uint16_t    dual_watch_delay_after_vox_10ms;
@@ -223,34 +225,34 @@ extern uint16_t              g_eeprom_rssi_calib[7][4];
 
 extern uint8_t               g_user_channel_attributes[207];
 
-extern volatile uint16_t     g_battery_save_count_down_10ms;
-
-extern volatile bool         g_power_save_expired;
+extern volatile uint16_t     g_schedule_power_save_tick_10ms;
 extern volatile bool         g_schedule_power_save;
 
-extern volatile uint16_t     g_dual_watch_delay_10ms;
+extern volatile bool         g_power_save_expired;
+
+extern volatile uint16_t     g_dual_watch_tick_10ms;
 extern volatile bool         g_dual_watch_delay_down_expired;
 
-extern volatile uint8_t      g_serial_config_count_down_500ms;
+extern volatile uint8_t      g_serial_config_tick_500ms;
 
 extern volatile bool         g_next_time_slice_500ms;
 
-extern volatile uint16_t     g_tx_timer_count_down_500ms;
+extern volatile uint16_t     g_tx_timer_tick_500ms;
 extern volatile bool         g_tx_timeout_reached;
 
-extern volatile uint16_t     g_tail_tone_elimination_count_down_10ms;
+extern volatile uint16_t     g_tail_tone_elimination_tick_10ms;
 
 #ifdef ENABLE_FMRADIO
-	extern volatile uint16_t g_fm_play_count_down_10ms;
+	extern volatile uint16_t g_fm_play_tick_10ms;
 #endif
 #ifdef ENABLE_NOAA
-	extern volatile uint16_t g_noaa_count_down_10ms;
+	extern volatile uint16_t g_noaa_tick_10ms;
 #endif
 extern bool                  g_speaker_enabled;
 extern uint8_t               g_key_input_count_down;
 
 #ifdef ENABLE_KEYLOCK
-	extern uint8_t               g_key_lock_count_down_500ms;
+	extern uint8_t           g_key_lock_tick_500ms;
 #endif
 
 extern uint8_t               g_rtte_count_down;
@@ -268,7 +270,7 @@ extern uint8_t               g_battery_voltage_index;
 extern css_scan_mode_t       g_css_scan_mode;
 extern bool                  g_update_rssi;
 extern alarm_state_t         g_alarm_state;
-extern uint16_t              g_menu_count_down;
+extern uint16_t              g_menu_tick_10ms;
 extern bool                  g_flag_reconfigure_vfos;
 extern uint8_t               g_vfo_configure_mode;
 extern bool                  g_flag_reset_vfos;
@@ -296,14 +298,17 @@ extern bool                  g_cxcss_tail_found;
 #ifdef ENABLE_VOX
 	extern bool              g_vox_lost;
 	extern bool              g_vox_noise_detected;
-	extern uint16_t          g_vox_resume_count_down;
-	extern uint16_t          g_vox_pause_count_down;
+	extern uint16_t          g_vox_resume_tick_10ms;
+	extern uint16_t          g_vox_pause_tick_10ms;
 #endif
+
 extern bool                  g_squelch_open;
+
 extern uint8_t               g_flash_light_state;
-extern volatile uint16_t     g_flash_light_blink_counter;
+extern uint16_t              g_flash_light_blink_tick_10ms;
+
 extern bool                  g_flag_end_tx;
-extern uint16_t              g_low_batteryCountdown;
+extern uint16_t              g_low_battery_tick_10ms;
 extern reception_mode_t      g_rx_reception_mode;
 
 extern uint8_t               g_scan_next_channel;      //
@@ -311,7 +316,7 @@ extern scan_next_chan_t      g_scan_current_scan_list; //
 extern uint8_t               g_scan_restore_channel;   // the channel   we were on before starting the RF scan
 extern uint32_t              g_scan_restore_frequency; // the frequency we were on before starting the RF scan
 extern bool                  g_scan_pause_time_mode;   // set if we stopped in SCAN_RESUME_TIME mode
-extern volatile uint16_t     g_scan_pause_10ms;        // ticks till we move to next channel/frequency
+extern volatile uint16_t     g_scan_pause_tick_10ms;        // ticks till we move to next channel/frequency
 extern scan_state_dir_t      g_scan_state_dir;         // the direction we're scanning in
 
 
@@ -330,14 +335,14 @@ extern bool                  g_unhide_hidden;
 #ifdef ENABLE_FMRADIO
 	extern uint8_t           g_fm_channel_position;
 #endif
-extern volatile uint8_t      g_found_cdcss_count_down_10ms;
-extern volatile uint8_t      g_found_ctcss_count_down_10ms;
+extern volatile uint8_t      g_found_cdcss_tick_10ms;
+extern volatile uint8_t      g_found_ctcss_tick_10ms;
 #ifdef ENABLE_VOX
-	extern volatile uint16_t g_vox_stop_count_down_10ms;
+	extern volatile uint16_t g_vox_stop_tick_10ms;
 #endif
 extern volatile bool         g_next_time_slice_40ms;
 #ifdef ENABLE_NOAA
-	extern volatile uint16_t g_noaa_count_down_10ms;
+	extern volatile uint16_t g_noaa_tick_10ms;
 	extern volatile bool     g_schedule_noaa;
 #endif
 extern volatile bool         g_flag_tail_tone_elimination_complete;
@@ -345,7 +350,7 @@ extern volatile bool         g_flag_tail_tone_elimination_complete;
 	extern volatile bool     g_schedule_fm;
 #endif
 extern int16_t               g_current_rssi[2];   // now one per VFO
-extern volatile uint16_t     g_boot_counter_10ms;
+extern volatile uint16_t     g_boot_tick_10ms;
 
 unsigned int get_TX_VFO(void);
 unsigned int get_RX_VFO(void);

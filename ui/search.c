@@ -34,7 +34,7 @@ void UI_DisplaySearch(void)
 	char String[17];
 	bool text_centered = false;
 
-	if (g_screen_to_display != DISPLAY_SEARCH)
+	if (g_current_display_screen != DISPLAY_SEARCH)
 		return;
 	
 	// clear display buffer
@@ -42,9 +42,6 @@ void UI_DisplaySearch(void)
 
 	// ***********************************
 	// frequency text line
-
-	#pragma GCC diagnostic push
-	#pragma GCC diagnostic ignored "-Wimplicit-fallthrough="
 
 	switch (g_search_css_state)
 	{
@@ -56,6 +53,8 @@ void UI_DisplaySearch(void)
 				break;
 			}
 			
+			// Fallthrough
+
 		case SEARCH_CSS_STATE_SCANNING:
 		case SEARCH_CSS_STATE_FOUND:
 		case SEARCH_CSS_STATE_FAILED:
@@ -70,8 +69,6 @@ void UI_DisplaySearch(void)
 			strcpy(String, "FREQ none found");
 			break;
 	}
-
-	#pragma GCC diagnostic pop
 
 	UI_PrintString(String, 2, 0, 1, 8);
 
@@ -124,9 +121,6 @@ void UI_DisplaySearch(void)
 
 	memset(String, 0, sizeof(String));
 
-	#pragma GCC diagnostic push
-	#pragma GCC diagnostic ignored "-Wimplicit-fallthrough="
-
 	switch (g_search_edit_state)
 	{
 		default:
@@ -155,6 +149,8 @@ void UI_DisplaySearch(void)
 						break;
 					}
 					
+				// Fallthrough
+
 				case SEARCH_CSS_STATE_FREQ_FAILED:
 				case SEARCH_CSS_STATE_REPEAT:
 					strcpy(String, "* repeat");
@@ -180,8 +176,6 @@ void UI_DisplaySearch(void)
 			text_centered = true;
 			break;
 	}
-
-	#pragma GCC diagnostic pop
 
 	UI_PrintString(String, text_centered ? 0 : 2, text_centered ? 127 : 0, 5, 8);
 

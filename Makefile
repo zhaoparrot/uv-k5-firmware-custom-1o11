@@ -18,8 +18,8 @@ ENABLE_AIRCOPY                   := 0
 ENABLE_AIRCOPY_REMEMBER_FREQ     := 0
 ENABLE_AIRCOPY_RX_REBOOT         := 0
 # FM Radio 4.2 kB
+ENABLE_FMRADIO_64_76             := 0
 ENABLE_FMRADIO_76_90             := 0
-ENABLE_FMRADIO_68_108            := 0
 ENABLE_FMRADIO_76_108            := 0
 ENABLE_FMRADIO_875_108           := 0
 # NOAA 1.2 kB
@@ -30,51 +30,55 @@ ENABLE_MUTE_RADIO_FOR_VOICE      := 0
 # Tx on Voice 1.0 kB
 ENABLE_VOX                       := 0
 ENABLE_REDUCE_LOW_MID_TX_POWER   := 1
-# Tx Alarm 0.6 kB
+# Tx Alarm 600 B
 ENABLE_ALARM                     := 0
 ENABLE_TX1750                    := 0
-# MDC1200 0.892 kB
+# MDC1200 2.8 kB
 ENABLE_MDC1200                   := 1
 ENABLE_PWRON_PASSWORD            := 0
 ENABLE_RESET_AES_KEY             := 0
 ENABLE_BIG_FREQ                  := 1
-ENABLE_SMALL_BOLD                := 0
-# trim trailing 44B
+# smaa bolf 580 B
+ENABLE_SMALL_BOLD                := 1
+# smallest font 2 kB
+ENABLE_SMALLEST_FONT             := 1
+# trim trailing 44 B
 ENABLE_TRIM_TRAILING_ZEROS       := 0
 ENABLE_KEEP_MEM_NAME             := 1
 ENABLE_WIDE_RX                   := 0
 ENABLE_TX_WHEN_AM                := 0
-# Freq calibration 0.188 kB
+# Freq calibration 188 B
 ENABLE_F_CAL_MENU                := 0
 ENABLE_TX_UNLOCK                 := 0
 ENABLE_CTCSS_TAIL_PHASE_SHIFT    := 0
 ENABLE_CONTRAST                  := 0
 ENABLE_BOOT_BEEPS                := 0
 ENABLE_DTMF_CALL_FLASH_LIGHT     := 0
+ENABLE_FLASH_LIGHT_SOS_TONE      := 0
 ENABLE_SHOW_CHARGE_LEVEL         := 0
 ENABLE_REVERSE_BAT_SYMBOL        := 0
 ENABLE_FREQ_SEARCH_TIMEOUT       := 0
 ENABLE_CODE_SEARCH_TIMEOUT       := 0
-# Kill and Revive 0.4 kB
+# Kill and Revive 400 B
 ENABLE_KILL_REVIVE               := 0
-# AM Fix 0.8 kB
+# AM Fix 800 B
 ENABLE_AM_FIX                    := 1
 ENABLE_AM_FIX_SHOW_DATA          := 0
-# Squelch 0.012 kB .. can't be right ?
+# Squelch 12 B .. can't be right ?
 ENABLE_SQUELCH_MORE_SENSITIVE    := 1
 ENABLE_SQ_OPEN_WITH_UP_DN_BUTTS  := 1
 ENABLE_FASTER_CHANNEL_SCAN       := 1
 ENABLE_COPY_CHAN_TO_VFO_TO_CHAN  := 1
-# Rx Signal Bar 0.4 kB
+# Rx Signal Bar 400 B
 ENABLE_RX_SIGNAL_BAR             := 1
-# Tx Timeout Bar 0.2 kB
+# Tx Timeout Bar 200 B
 ENABLE_TX_TIMEOUT_BAR            := 0
-# Tx Audio Bar 0.3 kB
+# Tx Audio Bar 300 B
 ENABLE_TX_AUDIO_BAR              := 0
-# Side Button Menu 0.3 kB
+# Side Button Menu 300 B
 ENABLE_SIDE_BUTT_MENU            := 0
-# Key Lock 0.4 kB
-ENABLE_KEYLOCK                   := 0
+# Key Lock 400 B
+ENABLE_KEYLOCK                   := 1
 #ENABLE_PANADAPTER               := 0
 #ENABLE_SINGLE_VFO_CHAN          := 0
 
@@ -105,7 +109,7 @@ ifeq ($(ENABLE_LTO),1)
 	ENABLE_OVERLAY := 0
 endif
 
-ifeq ($(filter $(ENABLE_FMRADIO_76_90) $(ENABLE_FMRADIO_68_108) $(ENABLE_FMRADIO_76_108) $(ENABLE_FMRADIO_875_108), 1), 1)
+ifeq ($(filter $(ENABLE_FMRADIO_64_76) $(ENABLE_FMRADIO_76_90) $(ENABLE_FMRADIO_76_108) $(ENABLE_FMRADIO_875_108), 1), 1)
 	ENABLE_FMRADIO := 1
 else
 	ENABLE_FMRADIO := 0
@@ -296,11 +300,11 @@ endif
 ifeq ($(ENABLE_AIRCOPY_RX_REBOOT),1)
 	CFLAGS += -DENABLE_AIRCOPY_RX_REBOOT
 endif
+ifeq ($(ENABLE_FMRADIO_64_76),1)
+	CFLAGS += -DENABLE_FMRADIO_64_76
+endif
 ifeq ($(ENABLE_FMRADIO_76_90),1)
 	CFLAGS += -DENABLE_FMRADIO_76_90
-endif
-ifeq ($(ENABLE_FMRADIO_68_108),1)
-	CFLAGS += -DENABLE_FMRADIO_68_108
 endif
 ifeq ($(ENABLE_FMRADIO_76_108),1)
 	CFLAGS += -DENABLE_FMRADIO_76_108
@@ -322,6 +326,9 @@ ifeq ($(ENABLE_BIG_FREQ),1)
 endif
 ifeq ($(ENABLE_SMALL_BOLD),1)
 	CFLAGS  += -DENABLE_SMALL_BOLD
+endif
+ifeq ($(ENABLE_SMALLEST_FONT),1)
+	CFLAGS  += -DENABLE_SMALLEST_FONT
 endif
 ifeq ($(ENABLE_TRIM_TRAILING_ZEROS),1)
 	CFLAGS  += -DENABLE_TRIM_TRAILING_ZEROS
@@ -382,6 +389,9 @@ ifeq ($(ENABLE_BOOT_BEEPS),1)
 endif
 ifeq ($(ENABLE_DTMF_CALL_FLASH_LIGHT),1)
 	CFLAGS  += -DENABLE_DTMF_CALL_FLASH_LIGHT
+endif
+ifeq ($(ENABLE_FLASH_LIGHT_SOS_TONE),1)
+	CFLAGS  += -DENABLE_FLASH_LIGHT_SOS_TONE
 endif
 ifeq ($(ENABLE_SHOW_CHARGE_LEVEL),1)
 	CFLAGS  += -DENABLE_SHOW_CHARGE_LEVEL

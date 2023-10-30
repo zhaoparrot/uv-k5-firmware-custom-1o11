@@ -33,7 +33,9 @@
 #include "driver/crc.h"
 #include "driver/eeprom.h"
 #include "driver/gpio.h"
-#include "driver/uart.h"
+#if defined(ENABLE_UART)
+	#include "driver/uart.h"
+#endif
 #include "functions.h"
 #include "misc.h"
 #include "settings.h"
@@ -245,7 +247,7 @@ static void cmd_0514(const uint8_t *pBuffer)
 
 	time_stamp = pCmd->time_stamp;
 
-	g_serial_config_count_down_500ms = serial_config_count_down_500ms;
+	g_serial_config_tick_500ms = serial_config_tick_500ms;
 
 	// show message
 	g_request_display_screen = DISPLAY_MAIN;
@@ -266,7 +268,7 @@ static void cmd_051B(const uint8_t *pBuffer)
 //	if (pCmd->time_stamp != time_stamp)
 //		return;
 
-	g_serial_config_count_down_500ms = serial_config_count_down_500ms;
+	g_serial_config_tick_500ms = serial_config_tick_500ms;
 
 	if (addr >= EEPROM_SIZE)
 		return;
@@ -310,7 +312,7 @@ static void cmd_051D(const uint8_t *pBuffer)
 //	if (pCmd->time_stamp != time_stamp)
 //		return;
 
-	g_serial_config_count_down_500ms = serial_config_count_down_500ms;
+	g_serial_config_tick_500ms = serial_config_tick_500ms;
 
 	if (addr >= EEPROM_SIZE)
 		return;
@@ -369,7 +371,7 @@ static void cmd_051D(const uint8_t *pBuffer)
 
 		#ifdef INCLUDE_AES
 			if (reload_eeprom)
-				BOARD_EEPROM_load();
+				BOARD_eeprom_load();
 		#endif
 	}
 
@@ -416,7 +418,7 @@ static void cmd_052D(const uint8_t *pBuffer)
 	uint32_t     response[4];
 	reply_052D_t reply;
 
-	g_serial_config_count_down_500ms = serial_config_count_down_500ms;
+	g_serial_config_tick_500ms = serial_config_tick_500ms;
 
 	if (!locked)
 	{
@@ -470,7 +472,7 @@ static void cmd_052F(const uint8_t *pBuffer)
 	g_eeprom.vfo_info[0].dtmf_ptt_id_tx_mode  = PTT_ID_OFF;
 	g_eeprom.vfo_info[0].dtmf_decoding_enable = false;
 
-	g_serial_config_count_down_500ms = serial_config_count_down_500ms;
+	g_serial_config_tick_500ms = serial_config_tick_500ms;
 
 	#ifdef ENABLE_NOAA
 		g_is_noaa_mode = false;
