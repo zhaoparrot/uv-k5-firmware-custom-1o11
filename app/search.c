@@ -19,8 +19,12 @@
 #include "app/search.h"
 #include "audio.h"
 #include "board.h"
+#include "bsp/dp32g030/gpio.h"
 #include "driver/bk4819.h"
-#include "driver/uart.h"
+#include "driver/gpio.h"
+#if defined(ENABLE_UART) && defined(ENABLE_UART_DEBUG)
+	#include "driver/uart.h"
+#endif
 #include "frequencies.h"
 #include "misc.h"
 #include "radio.h"
@@ -96,9 +100,6 @@ static void SEARCH_Key_EXIT(bool key_pressed, bool key_held)
 
 	g_beep_to_play = BEEP_1KHZ_60MS_OPTIONAL;
 
-	#pragma GCC diagnostic push
-	#pragma GCC diagnostic ignored "-Wimplicit-fallthrough="
-
 	switch (g_search_edit_state)
 	{
 		case SEARCH_EDIT_STATE_NONE:
@@ -126,6 +127,8 @@ static void SEARCH_Key_EXIT(bool key_pressed, bool key_held)
 				break;
 			}
 
+			// Fallthrough
+
 		case SEARCH_EDIT_STATE_SAVE_CONFIRM:
 			g_search_edit_state = SEARCH_EDIT_STATE_NONE;
 
@@ -137,8 +140,6 @@ static void SEARCH_Key_EXIT(bool key_pressed, bool key_held)
 			g_update_display         = true;
 			break;
 	}
-
-	#pragma GCC diagnostic pop
 }
 
 static void SEARCH_Key_MENU(bool key_pressed, bool key_held)
@@ -170,9 +171,6 @@ static void SEARCH_Key_MENU(bool key_pressed, bool key_held)
 	}
 
 	g_beep_to_play = BEEP_1KHZ_60MS_OPTIONAL;
-
-	#pragma GCC diagnostic push
-	#pragma GCC diagnostic ignored "-Wimplicit-fallthrough="
 
 	switch (g_search_edit_state)
 	{
@@ -225,11 +223,12 @@ static void SEARCH_Key_MENU(bool key_pressed, bool key_held)
 			
 			if (g_input_box_index == 0)
 			{
-				g_search_edit_state     = SEARCH_EDIT_STATE_SAVE_CONFIRM;
-
+				g_search_edit_state      = SEARCH_EDIT_STATE_SAVE_CONFIRM;
 				g_beep_to_play           = BEEP_1KHZ_60MS_OPTIONAL;
 				g_request_display_screen = DISPLAY_SEARCH;
 			}
+			
+			// Fallthrough
 			
 //			break;
 
@@ -303,8 +302,6 @@ static void SEARCH_Key_MENU(bool key_pressed, bool key_held)
 			g_beep_to_play = BEEP_1KHZ_60MS_OPTIONAL;
 			break;
 	}
-
-	#pragma GCC diagnostic pop
 }
 
 static void SEARCH_Key_STAR(bool key_pressed, bool key_held)
@@ -404,6 +401,9 @@ void SEARCH_Start(void)
 
 	g_rx_vfo->step_setting = BackupStep;
 	g_rx_vfo->step_freq    = BackupStepFreq;
+
+	g_monitor_enabled = false;
+	GPIO_ClearBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
 
 	RADIO_setup_registers(true);
 

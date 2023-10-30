@@ -54,8 +54,8 @@ void UI_DisplayStatus(const bool test_display)
 	}
 	else
 	if (g_current_function == FUNCTION_RECEIVE ||
-	    g_current_function == FUNCTION_MONITOR ||
-	    g_current_function == FUNCTION_NEW_RECEIVE)
+	    g_current_function == FUNCTION_NEW_RECEIVE ||
+		g_monitor_enabled)
 	{
 		memcpy(line + x, BITMAP_RX, sizeof(BITMAP_RX));
 		x1 = x + sizeof(BITMAP_RX);
@@ -99,11 +99,10 @@ void UI_DisplayStatus(const bool test_display)
 		else
 	#endif
 		// SCAN indicator
-		if (g_scan_state_dir != SCAN_STATE_DIR_OFF ||
-		    g_screen_to_display == DISPLAY_SEARCH ||
-		    test_display)
+		if (g_scan_state_dir != SCAN_STATE_DIR_OFF || test_display)
 		{
-			if (g_search_css_state == SEARCH_CSS_STATE_OFF) // don't display this if in search mode
+			// don't display this if in search mode
+			if (g_current_display_screen != DISPLAY_SEARCH)
 			{
 				if (g_scan_next_channel <= USER_CHANNEL_LAST)
 				{	// channel mode
@@ -141,12 +140,12 @@ void UI_DisplayStatus(const bool test_display)
 	// DUAL-WATCH indicator
 	if (g_eeprom.dual_watch != DUAL_WATCH_OFF || test_display)
 	{
-		if (g_dual_watch_delay_10ms > dual_watch_delay_toggle_10ms ||
+		if (g_dual_watch_tick_10ms > dual_watch_delay_toggle_10ms ||
 	        g_dtmf_call_state != DTMF_CALL_STATE_NONE ||
 		    g_scan_state_dir != SCAN_STATE_DIR_OFF  ||
 			g_css_scan_mode != CSS_SCAN_MODE_OFF    ||
 			(g_current_function != FUNCTION_FOREGROUND && g_current_function != FUNCTION_POWER_SAVE) ||
-			g_screen_to_display == DISPLAY_SEARCH)
+			g_current_display_screen == DISPLAY_SEARCH)
 		{
 			memcpy(line + x, BITMAP_TDR_HOLDING, sizeof(BITMAP_TDR_HOLDING));
 		}
@@ -158,7 +157,8 @@ void UI_DisplayStatus(const bool test_display)
 	}
 	x += sizeof(BITMAP_TDR_RUNNING);
 
-	if (g_current_function == FUNCTION_MONITOR)
+	// monitor
+	if (g_monitor_enabled)
 	{
 		memcpy(line + x, BITMAP_MONITOR, sizeof(BITMAP_MONITOR));
 		x1 = x + sizeof(BITMAP_MONITOR);

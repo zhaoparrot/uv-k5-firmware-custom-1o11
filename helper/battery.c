@@ -32,7 +32,7 @@ bool              g_low_battery;
 bool              g_low_battery_blink;
 uint16_t          g_battery_check_counter;
 
-volatile uint16_t g_power_save_10ms;
+volatile uint16_t g_power_save_tick_10ms;
 
 /*
 Based on real measurement
@@ -106,7 +106,7 @@ void BATTERY_GetReadings(const bool bDisplayBatteryLevel)
 
 	g_battery_voltage_average = (Voltage * 760) / g_battery_calibration[3];
 
-	if ((g_screen_to_display == DISPLAY_MENU) && g_menu_cursor == MENU_VOLTAGE)
+	if ((g_current_display_screen == DISPLAY_MENU) && g_menu_cursor == MENU_VOLTAGE)
 		g_update_display = true;
 
 	if (g_usb_current < 501)
@@ -145,6 +145,6 @@ void BATTERY_GetReadings(const bool bDisplayBatteryLevel)
 				UI_DisplayBattery(g_battery_display_level, g_low_battery_blink);
 		}
 
-		g_low_batteryCountdown = 0;
+		g_low_battery_tick_10ms = 0;
 	}
 }

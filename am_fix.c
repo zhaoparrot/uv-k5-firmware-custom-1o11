@@ -305,7 +305,6 @@
 			case FUNCTION_FOREGROUND:
 			case FUNCTION_NEW_RECEIVE:
 			case FUNCTION_RECEIVE:
-			case FUNCTION_MONITOR:
 				break;
 		}
 
@@ -449,6 +448,9 @@
 
 		void AM_fix_print_data(const int vfo, char *s)
 		{
+			if (g_current_display_screen != DISPLAY_MAIN || g_dtmf_call_state != DTMF_CALL_STATE_NONE)
+				return;
+
 			if (s != NULL && vfo >= 0 && vfo < (int)ARRAY_SIZE(gain_table_index))
 			{
 				const unsigned int index = gain_table_index[vfo];

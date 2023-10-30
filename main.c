@@ -27,14 +27,22 @@
 #include "bsp/dp32g030/syscon.h"
 #include "board.h"
 #include "driver/backlight.h"
+#ifdef ENABLE_FMRADIO
+	#include "driver/bk1080.h"
+#endif
 #include "driver/bk4819.h"
 #include "driver/gpio.h"
 #include "driver/st7565.h"
 #include "driver/system.h"
 #include "driver/systick.h"
-#include "driver/uart.h"
+#if defined(ENABLE_UART)
+	#include "driver/uart.h"
+#endif
 #include "helper/battery.h"
 #include "helper/boot.h"
+#ifdef ENABLE_MDC1200
+	#include "mdc1200.h"
+#endif
 #include "misc.h"
 #include "radio.h"
 #include "settings.h"
@@ -42,11 +50,6 @@
 #include "ui/welcome.h"
 #include "ui/menu.h"
 #include "version.h"
-
-void _putchar(char c)
-{
-	UART_Send((uint8_t *)&c, 1);
-}
 
 void Main(void)
 {
@@ -64,10 +67,15 @@ void Main(void)
 		| SYSCON_DEV_CLK_GATE_CRC_BITS_ENABLE
 		| SYSCON_DEV_CLK_GATE_AES_BITS_ENABLE;
 
+	g_monitor_enabled = false;
+	GPIO_ClearBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
+
 	SYSTICK_Init();
+
 #ifdef ENABLE_UART
 	UART_Init();
 #endif
+
 	BOARD_Init();
 
 	#if defined(ENABLE_UART)
@@ -90,11 +98,22 @@ void Main(void)
 
 	BK4819_Init();
 
+	#if defined(ENABLE_UART)
+		UART_printf("BK4819  id %04X  rev %04X\r\n", BK4819_ReadRegister(0x00), BK4819_ReadRegister(0x01));
+		#ifdef ENABLE_FMRADIO
+			UART_printf("BK1080  id %04X  rev %04X\r\n", BK1080_ReadRegister(0x01), BK1080_ReadRegister(0x00));
+		#endif
+	#endif
+
+#ifdef ENABLE_MDC1200
+	MDC1200_init();
+#endif
+
 	BOARD_ADC_GetBatteryInfo(&g_usb_current_voltage, &g_usb_current);
 
-	BOARD_EEPROM_load();
+	BOARD_eeprom_load();
 
-	BOARD_EEPROM_LoadCalibration();
+	BOARD_eeprom_loadCalibration();
 
 	RADIO_configure_channel(0, VFO_CONFIGURE_RELOAD);
 	RADIO_configure_channel(1, VFO_CONFIGURE_RELOAD);
@@ -111,7 +130,7 @@ void Main(void)
 	#ifdef ENABLE_CONTRAST
 		ST7565_SetContrast(g_setting_contrast);
 	#endif
-	
+
 	#ifdef ENABLE_AM_FIX
 		AM_fix_init();
 	#endif
@@ -167,15 +186,15 @@ void Main(void)
 
 		if (g_eeprom.pwr_on_display_mode != PWR_ON_DISPLAY_MODE_NONE)
 		{	// 3 second boot-up screen
-			while (g_boot_counter_10ms > 0)
+			while (g_boot_tick_10ms > 0)
 			{
 				if (KEYBOARD_Poll() != KEY_INVALID)
 				{	// halt boot beeps and cancel boot screen
-					g_boot_counter_10ms = 0;
+					g_boot_tick_10ms = 0;
 					break;
 				}
 				#ifdef ENABLE_BOOT_BEEPS
-					if ((g_boot_counter_10ms % 25) == 0)
+					if ((g_boot_tick_10ms % 25) == 0)
 						AUDIO_PlayBeep(BEEP_880HZ_40MS_OPTIONAL);
 				#endif
 			}
@@ -220,9 +239,22 @@ void Main(void)
 		#endif
 	}
 
+	// Everything is initialised, set SLEEP* bits
+	SYSCON_REGISTER |= SYSCON_REGISTER_SLEEPONEXIT_BITS_ENABLE;
+	SYSCON_REGISTER |= SYSCON_REGISTER_SLEEPDEEP_BITS_ENABLE;
+
 	while (1)
 	{
-		APP_process();
+		#if 1
+			// Mask interrupts
+			__asm volatile ("cpsid i");
+			if (!g_next_time_slice)
+				// Idle condition, hint the MCU to sleep
+				// CMSIS suggests GCC reorders memory and is undesirable
+				__asm volatile ("wfi":::"memory");
+			// Unmask interrupts
+			__asm volatile ("cpsie i");
+		#endif
 
 		if (g_next_time_slice)
 		{

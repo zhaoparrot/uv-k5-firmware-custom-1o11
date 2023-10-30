@@ -31,7 +31,7 @@ void UI_DisplayAircopy(void)
 	const uint8_t errors = g_aircopy_rx_errors_fsk_crc + g_aircopy_rx_errors_magic + g_aircopy_rx_errors_crc;
 	char str[17];
 
-	if (g_screen_to_display != DISPLAY_AIRCOPY)
+	if (g_current_display_screen != DISPLAY_AIRCOPY)
 		return;
 
 	// clear screen/display buffer
@@ -87,9 +87,6 @@ void UI_DisplayAircopy(void)
 	// **********************************
 	// lower TX/RX status text line
 
-	#pragma GCC diagnostic push
-	#pragma GCC diagnostic ignored "-Wimplicit-fallthrough="
-
 	switch (g_aircopy_state)
 	{
 		case AIRCOPY_READY:
@@ -131,8 +128,6 @@ void UI_DisplayAircopy(void)
 			UI_PrintString(str, 0, LCD_WIDTH, 5, 7);
 			break;
 	}
-
-	#pragma GCC diagnostic pop
 
 	// **********************************
 

@@ -26,7 +26,9 @@
 #include "driver/bk4819.h"
 #include "driver/eeprom.h"   // EEPROM_ReadBuffer()
 #include "driver/st7565.h"
-#include "driver/uart.h"
+#if defined(ENABLE_UART) && defined(ENABLE_UART_DEBUG)
+	#include "driver/uart.h"
+#endif
 #include "external/printf/printf.h"
 #include "frequencies.h"
 #include "helper/battery.h"
@@ -552,9 +554,6 @@ void UI_DisplayMenu(void)
 	memset(str, 0, sizeof(str));
 
 	bool already_printed = false;
-
-	#pragma GCC diagnostic push
-	#pragma GCC diagnostic ignored "-Wimplicit-fallthrough="
 
 	switch (g_menu_cursor)
 	{
@@ -1182,8 +1181,6 @@ void UI_DisplayMenu(void)
 			break;
 		}
 	}
-
-	#pragma GCC diagnostic pop
 
 	if (!already_printed)
 	{	// we now do multi-line text in a single string

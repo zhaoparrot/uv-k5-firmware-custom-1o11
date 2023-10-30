@@ -53,14 +53,14 @@ char               g_dtmf_id[4];
 char               g_dtmf_caller[4];
 char               g_dtmf_callee[4];
 dtmf_state_t       g_dtmf_state;
-uint8_t            g_dtmf_decode_ring_count_down_500ms;
+uint8_t            g_dtmf_decode_ring_tick_500ms;
 uint8_t            g_dtmf_chosen_contact;
 uint8_t            g_dtmf_auto_reset_time_500ms;
 dtmf_call_state_t  g_dtmf_call_state;
 dtmf_reply_state_t g_dtmf_reply_state;
 dtmf_call_mode_t   g_dtmf_call_mode;
 bool               g_dtmf_is_tx;
-uint8_t            g_dtmf_tx_stop_count_down_500ms;
+uint8_t            g_dtmf_tx_stop_tick_500ms;
 bool               g_dtmf_IsGroupCall;
 
 void DTMF_clear_RX(void)
@@ -361,27 +361,25 @@ void DTMF_HandleRequest(void)
 
 			g_update_display = true;
 
-			#pragma GCC diagnostic push
-			#pragma GCC diagnostic ignored "-Wimplicit-fallthrough="
-
 			switch (g_eeprom.dtmf_decode_response)
 			{
 				case DTMF_DEC_RESPONSE_BOTH:
-					g_dtmf_decode_ring_count_down_500ms = dtmf_decode_ring_countdown_500ms;
+					g_dtmf_decode_ring_tick_500ms = dtmf_decode_ring_500ms;
+
+				// Fallthrough
+
 				case DTMF_DEC_RESPONSE_REPLY:
 					g_dtmf_reply_state = DTMF_REPLY_AAAAA;
 					break;
 				case DTMF_DEC_RESPONSE_RING:
-					g_dtmf_decode_ring_count_down_500ms = dtmf_decode_ring_countdown_500ms;
+					g_dtmf_decode_ring_tick_500ms = dtmf_decode_ring_500ms;
 					break;
 				default:
 				case DTMF_DEC_RESPONSE_NONE:
-					g_dtmf_decode_ring_count_down_500ms = 0;
+					g_dtmf_decode_ring_tick_500ms = 0;
 					g_dtmf_reply_state = DTMF_REPLY_NONE;
 					break;
 			}
-
-			#pragma GCC diagnostic pop
 
 			if (g_dtmf_IsGroupCall)
 				g_dtmf_reply_state = DTMF_REPLY_NONE;
@@ -441,8 +439,8 @@ bool DTMF_Reply(void)
 
 	if (g_eeprom.dtmf_side_tone)
 	{	// the user will also hear the transmitted tones
-		GPIO_SetBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
 		g_speaker_enabled = true;
+		GPIO_SetBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
 	}
 
 	SYSTEM_DelayMs(Delay);
@@ -457,8 +455,8 @@ bool DTMF_Reply(void)
 		g_eeprom.dtmf_code_persist_time,
 		g_eeprom.dtmf_code_interval_time);
 
-	GPIO_ClearBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
 	g_speaker_enabled = false;
+	GPIO_ClearBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
 
 	BK4819_ExitDTMF_TX(false);
 	

@@ -29,7 +29,9 @@
 #include "driver/bk4819.h"
 #include "driver/gpio.h"
 #include "driver/system.h"
-#include "driver/uart.h"
+#if defined(ENABLE_UART) && defined(ENABLE_UART_DEBUG)
+	#include "driver/uart.h"
+#endif
 #include "frequencies.h"
 #include "functions.h"
 #include "helper/battery.h"
@@ -62,21 +64,21 @@ void FUNCTION_Init(void)
 	g_ctcss_lost       = false;
 
 	#ifdef ENABLE_VOX
-		g_vox_lost     = false;
+		g_vox_lost = false;
 	#endif
 
-	g_squelch_open     = false;
+	g_squelch_open = false;
 
-	g_flag_tail_tone_elimination_complete   = false;
-	g_tail_tone_elimination_count_down_10ms = 0;
-	g_found_ctcss                           = false;
-	g_found_cdcss                           = false;
-	g_found_ctcss_count_down_10ms           = 0;
-	g_found_cdcss_count_down_10ms           = 0;
-	g_end_of_rx_detected_maybe              = false;
+	g_flag_tail_tone_elimination_complete = false;
+	g_tail_tone_elimination_tick_10ms     = 0;
+	g_found_ctcss                         = false;
+	g_found_cdcss                         = false;
+	g_found_ctcss_tick_10ms               = 0;
+	g_found_cdcss_tick_10ms               = 0;
+	g_end_of_rx_detected_maybe            = false;
 
 	#ifdef ENABLE_NOAA
-		g_noaa_count_down_10ms = 0;
+		g_noaa_tick_10ms = 0;
 	#endif
 
 	g_update_status = true;
@@ -91,10 +93,8 @@ void FUNCTION_Select(function_type_t Function)
 
 	if (was_power_save && Function != FUNCTION_POWER_SAVE)
 	{	// wake up
-		BK4819_Conditional_RX_TurnOn_and_GPIO6_Enable();
-
+		BK4819_Conditional_RX_TurnOn();
 		g_rx_idle_mode = false;
-
 		UI_DisplayStatus(false);
 	}
 
@@ -121,7 +121,7 @@ void FUNCTION_Select(function_type_t Function)
 
 			#ifdef ENABLE_FMRADIO
 				if (g_fm_radio_mode)
-					g_fm_restore_count_down_10ms = fm_restore_countdown_10ms;
+					g_fm_restore_tick_10ms = fm_restore_10ms;
 			#endif
 
 			if (g_dtmf_call_state == DTMF_CALL_STATE_CALL_OUT ||
@@ -133,26 +133,16 @@ void FUNCTION_Select(function_type_t Function)
 
 			return;
 
-		case FUNCTION_MONITOR:
-			#if defined(ENABLE_UART) && defined(ENABLE_UART_DEBUG)
-				UART_SendText("func monitor\r\n");
-			#endif
-
-			g_monitor_enabled = true;
-			break;
-
 		case FUNCTION_NEW_RECEIVE:
 			#if defined(ENABLE_UART) && defined(ENABLE_UART_DEBUG)
 				UART_SendText("func new receive\r\n");
 			#endif
-
 			break;
 			
 		case FUNCTION_RECEIVE:
 			#if defined(ENABLE_UART) && defined(ENABLE_UART_DEBUG)
 				UART_SendText("func receive\r\n");
 			#endif
-
 			break;
 
 		case FUNCTION_POWER_SAVE:
@@ -160,19 +150,24 @@ void FUNCTION_Select(function_type_t Function)
 				UART_SendText("func power save\r\n");
 			#endif
 
-			g_power_save_10ms    = g_eeprom.battery_save * 10;
-			g_power_save_expired = false;
+			if (g_flash_light_state != FLASHLIGHT_SOS)
+			{
+				g_speaker_enabled = false;
+				g_monitor_enabled = false;
+				GPIO_ClearBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
+			}
+			
+			g_power_save_tick_10ms = g_eeprom.battery_save * 10;
+			g_power_save_expired   = false;
 
 			g_rx_idle_mode = true;
-
-			g_monitor_enabled = false;
 
 			BK4819_DisableVox();			
 			BK4819_Sleep();
 
 			BK4819_set_GPIO_pin(BK4819_GPIO0_PIN28_RX_ENABLE, false);
 
-			if (g_screen_to_display != DISPLAY_MENU)     // 1of11 .. don't close the menu
+			if (g_current_display_screen != DISPLAY_MENU)
 				GUI_SelectNextDisplay(DISPLAY_MAIN);
 
 			return;
@@ -187,9 +182,9 @@ void FUNCTION_Select(function_type_t Function)
 
 			if (g_eeprom.dual_watch != DUAL_WATCH_OFF)
 			{	// dual-RX is enabled
-				g_dual_watch_delay_10ms = dual_watch_delay_after_tx_10ms;
-				if (g_dual_watch_delay_10ms < (g_eeprom.scan_hold_time_500ms * 50))
-					g_dual_watch_delay_10ms = g_eeprom.scan_hold_time_500ms * 50;
+				g_dual_watch_tick_10ms = dual_watch_delay_after_tx_10ms;
+				if (g_dual_watch_tick_10ms < (g_eeprom.scan_hold_time_500ms * 50))
+					g_dual_watch_tick_10ms = g_eeprom.scan_hold_time_500ms * 50;
 			}
 
 			#ifdef ENABLE_MDC1200
@@ -227,13 +222,12 @@ void FUNCTION_Select(function_type_t Function)
 
 					GPIO_ClearBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
 
-					SYSTEM_DelayMs(20);
+					SYSTEM_DelayMs(2);
 					BK4819_StartTone1(500, 28, true);
 					SYSTEM_DelayMs(2);
 
-					GPIO_SetBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
-
 					g_speaker_enabled = true;
+					GPIO_SetBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
 
 					SYSTEM_DelayMs(60);
 					BK4819_ExitTxMute();
@@ -262,13 +256,12 @@ void FUNCTION_Select(function_type_t Function)
 
 					SYSTEM_DelayMs(2);
 
+					g_speaker_enabled = true;
 					GPIO_SetBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
 
 					#ifdef ENABLE_ALARM
 						g_alarm_tone_counter_10ms = 0;
 					#endif
-
-					g_speaker_enabled = true;
 					break;
 				}
 				else
@@ -278,16 +271,46 @@ void FUNCTION_Select(function_type_t Function)
 			{
 			#ifdef ENABLE_MDC1200
 				if (g_current_vfo->mdc1200_mode == MDC1200_MODE_BOT || g_current_vfo->mdc1200_mode == MDC1200_MODE_BOTH)
+				{
+					BK4819_WriteRegister(0x30,
+						(1u  << 15) |    // enable  VCO calibration
+						(1u  << 14) |    // enable something or other
+						(0u  << 10) |    // diable  RX link
+						(1u  <<  9) |    // enable  AF DAC
+						(1u  <<  8) |    // enable  DISC mode, what's DISC mode ?
+						(15u <<  4) |    // enable  PLL/VCO
+						(1u  <<  3) |    // enable  PA gain
+						(0u  <<  2) |    // disable MIC ADC
+						(1u  <<  1) |    // enable  TX DSP
+						(0u  <<  0));    // disable RX DSP
+					SYSTEM_DelayMs(120);
 					BK4819_send_MDC1200(MDC1200_OP_CODE_PTT_ID, 0x80, g_eeprom.mdc1200_id);
+				}
 				else
 			#endif
 				if (g_current_vfo->dtmf_ptt_id_tx_mode == PTT_ID_APOLLO)
+				{
 					BK4819_PlayTone(APOLLO_TONE1_HZ, APOLLO_TONE_MS, 0);
+				}
+			}
+/*			
+			BK4819_WriteRegister(0x30,
+				(1u  << 15) |    // enable  VCO calibration
+				(1u  << 14) |    // enable  something or other
+				(0u  << 10) |    // diable  RX link
+				(1u  <<  9) |    // enable  AF DAC
+				(1u  <<  8) |    // enable  DISC mode, what's DISC mode ?
+				(15u <<  4) |    // enable  PLL/VCO
+				(1u  <<  3) |    // enable  PA gain
+				(1u  <<  2) |    // enable  MIC ADC
+				(1u  <<  1) |    // enable  TX DSP
+				(0u  <<  0));    // disable RX DSP
+*/
+			if (g_current_vfo->scrambling_type > 0 && g_setting_scramble_enable)
+			{
+				BK4819_EnableScramble(g_current_vfo->scrambling_type - 1);
 			}
 			
-			if (g_current_vfo->scrambling_type > 0 && g_setting_scramble_enable)
-				BK4819_EnableScramble(g_current_vfo->scrambling_type - 1);
-
 			break;
 
 		case FUNCTION_PANADAPTER:
@@ -295,15 +318,14 @@ void FUNCTION_Select(function_type_t Function)
 				UART_SendText("func panadpter\r\n");
 			#endif
 
-
 			break;
 	}
 
-	g_battery_save_count_down_10ms = battery_save_count_10ms;
+	g_schedule_power_save_tick_10ms = battery_save_count_10ms;
 	g_schedule_power_save          = false;
 
 	#ifdef ENABLE_FMRADIO
-		g_fm_restore_count_down_10ms = 0;
+		g_fm_restore_tick_10ms = 0;
 	#endif
 
 	g_update_status = true;
