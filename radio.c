@@ -634,7 +634,7 @@ void RADIO_setup_registers(bool switch_to_function_foreground)
 	uint16_t                  interrupt_mask;
 	uint32_t                  Frequency;
 
-	if (!g_speaker_enabled && !g_monitor_enabled)
+	if (!g_monitor_enabled)
 		GPIO_ClearBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
 
 	// turn green LED off
@@ -665,6 +665,20 @@ void RADIO_setup_registers(bool switch_to_function_foreground)
 			break;
 	}
 
+	BK4819_WriteRegister(0x30, 0);
+	BK4819_WriteRegister(0x30, 
+		BK4819_REG_30_ENABLE_VCO_CALIB |
+//		BK4819_REG_30_ENABLE_UNKNOWN   |
+		BK4819_REG_30_ENABLE_RX_LINK   |
+		BK4819_REG_30_ENABLE_AF_DAC    |
+		BK4819_REG_30_ENABLE_DISC_MODE |
+		BK4819_REG_30_ENABLE_PLL_VCO   |
+//		BK4819_REG_30_ENABLE_PA_GAIN   |
+//		BK4819_REG_30_ENABLE_MIC_ADC   |
+//		BK4819_REG_30_ENABLE_TX_DSP    |
+		BK4819_REG_30_ENABLE_RX_DSP    |
+	0);
+
 	BK4819_set_GPIO_pin(BK4819_GPIO5_PIN1_RED, false);         // LED off
 	BK4819_SetupPowerAmplifier(0, 0);
 	BK4819_set_GPIO_pin(BK4819_GPIO1_PIN29_PA_ENABLE, false);  // PA off
@@ -678,10 +692,6 @@ void RADIO_setup_registers(bool switch_to_function_foreground)
 		SYSTEM_DelayMs(1);
 	}
 	BK4819_WriteRegister(0x3F, 0);       // disable interrupts
-
-	// mic gain 0.5dB/step 0 to 31
-	BK4819_WriteRegister(0x7D, 0xE940 | (g_eeprom.mic_sensitivity_tuning & 0x1f));
-//	BK4819_WriteRegister(0x19, 0x1041);  // 0001 0000 0100 0001 <15> MIC AGC  1 = disable  0 = enable  .. doesn't work
 
 	#ifdef ENABLE_NOAA
 		if (IS_NOAA_CHANNEL(g_rx_vfo->channel_save) && g_is_noaa_mode)
@@ -823,6 +833,9 @@ void RADIO_setup_registers(bool switch_to_function_foreground)
 
 	if (switch_to_function_foreground)
 		FUNCTION_Select(FUNCTION_FOREGROUND);
+
+//	if (g_monitor_enabled)
+//		GPIO_SetBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
 }
 
 #ifdef ENABLE_NOAA
@@ -874,7 +887,6 @@ void RADIO_enableTX(const bool fsk_tx)
 {
 	BK4819_filter_bandwidth_t Bandwidth = g_current_vfo->channel_bandwidth;
 
-	g_speaker_enabled = false;
 	GPIO_ClearBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
 
 	BK4819_set_GPIO_pin(BK4819_GPIO0_PIN28_RX_ENABLE, false);
@@ -947,7 +959,7 @@ void RADIO_enableTX(const bool fsk_tx)
 	}
 }
 
-void RADIO_Setg_vfo_state(vfo_state_t State)
+void RADIO_set_vfo_state(vfo_state_t State)
 {
 	if (State == VFO_STATE_NORMAL)
 	{
@@ -1037,7 +1049,7 @@ void RADIO_PrepareTX(void)
 	if (State != VFO_STATE_NORMAL)
 	{	// TX not allowed
 
-		RADIO_Setg_vfo_state(State);
+		RADIO_set_vfo_state(State);
 
 		#if defined(ENABLE_ALARM) || defined(ENABLE_TX1750)
 			g_alarm_state = ALARM_STATE_OFF;
@@ -1137,7 +1149,6 @@ void RADIO_tx_eot(void)
 	{	// end-of-tx
 		if (g_eeprom.dtmf_side_tone)
 		{
-			g_speaker_enabled = true;
 			GPIO_SetBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
 
 			SYSTEM_DelayMs(60);
@@ -1152,7 +1163,6 @@ void RADIO_tx_eot(void)
 				g_eeprom.dtmf_code_persist_time,
 				g_eeprom.dtmf_code_interval_time);
 
-		g_speaker_enabled = false;
 		GPIO_ClearBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
 	}
 	else

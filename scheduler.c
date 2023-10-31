@@ -110,12 +110,12 @@ void SystickHandler(void)
 	#endif
 	
 	#ifdef ENABLE_FMRADIO
-		if (g_fm_scan_state != FM_SCAN_OFF &&
+		if (g_fm_scan_state_dir != FM_SCAN_STATE_DIR_OFF &&
 		   !g_monitor_enabled &&
 		    g_current_function != FUNCTION_TRANSMIT &&
 		    g_current_function != FUNCTION_RECEIVE)
 		{
-			DECREMENT_AND_TRIGGER(g_fm_play_tick_10ms, g_schedule_fm);
+			DECREMENT_AND_TRIGGER(g_fm_play_tick_10ms, g_fm_schedule);
 		}
 	#endif
 

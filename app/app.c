@@ -95,7 +95,7 @@ static void APP_update_rssi(const int vfo)
 
 	g_current_rssi[vfo] = rssi;
 
-	if (g_squelch_open || g_monitor_enabled)
+//	if (g_squelch_open || g_monitor_enabled)
 		UI_update_rssi(rssi, vfo);
 }
 
@@ -404,9 +404,6 @@ Skip:
 			break;
 
 		case END_OF_RX_MODE_END:
-			if (!g_monitor_enabled)
-				g_speaker_enabled = false;
-
 			RADIO_setup_registers(true);
 
 			#ifdef ENABLE_NOAA
@@ -421,10 +418,7 @@ Skip:
 
 			if (g_eeprom.tail_note_elimination)
 			{
-				if (!g_monitor_enabled)
-					g_speaker_enabled = false;
-
-				if (!g_speaker_enabled && !g_monitor_enabled)
+				if (!g_squelch_open && !g_monitor_enabled)
 					GPIO_ClearBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
 
 				g_tail_tone_elimination_tick_10ms     = 20;   // 200ms
@@ -468,11 +462,6 @@ bool APP_start_listening(void)
 
 	if (g_setting_backlight_on_tx_rx >= 2)
 		backlight_turn_on(backlight_tx_rx_time_500ms);
-
-	#ifdef ENABLE_FMRADIO
-		if (g_fm_radio_mode)
-			BK1080_Init(0, false);
-	#endif
 
 	#ifdef ENABLE_MDC1200
 //		MDC1200_reset_rx();
@@ -547,6 +536,8 @@ bool APP_start_listening(void)
 
 	FUNCTION_Select(FUNCTION_RECEIVE);
 
+	GPIO_SetBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
+
 	#ifdef ENABLE_VOICE
 		#ifdef MUTE_AUDIO_FOR_VOICE
 			if (g_voice_write_index == 0)
@@ -558,9 +549,10 @@ bool APP_start_listening(void)
 		AUDIO_set_mod_mode(g_rx_vfo->am_mode);
 	#endif
 
-	// enable the speaker
-	g_speaker_enabled = true;
-	GPIO_SetBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
+	#ifdef ENABLE_FMRADIO
+		if (g_fm_radio_mode)
+			BK1080_Init(0, false);		// disable the FM radio audio
+	#endif
 
 	if (g_current_display_screen != DISPLAY_MENU)
 		GUI_SelectNextDisplay(DISPLAY_MAIN);
@@ -706,7 +698,8 @@ static void APP_next_freq(void)
 		BK4819_set_rf_filter_path(frequency);
 
 		#ifdef ENABLE_FASTER_CHANNEL_SCAN
-			g_scan_pause_tick_10ms = 10;   // 100ms
+//			g_scan_pause_tick_10ms = 10;   // 100ms
+			g_scan_pause_tick_10ms = 6;    // 60ms
 		#else
 			g_scan_pause_tick_10ms = scan_pause_freq_10ms;
 		#endif
@@ -983,9 +976,15 @@ void APP_process_radio_interrupts(void)
 
 			BK4819_set_GPIO_pin(BK4819_GPIO6_PIN2_GREEN, false);  // LED off
 
+			if (!g_monitor_enabled)
+				GPIO_ClearBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
+
 			#if defined(ENABLE_UART) && defined(ENABLE_UART_DEBUG)
 				UART_SendText("sq close\r\n");
 			#endif
+
+			//APP_update_rssi(g_eeprom.rx_vfo);
+			g_update_rssi = true;
 
 			g_update_display = true;
 		}
@@ -998,6 +997,9 @@ void APP_process_radio_interrupts(void)
 			#if defined(ENABLE_UART) && defined(ENABLE_UART_DEBUG)
 				UART_SendText("sq open\r\n");
 			#endif
+
+			//APP_update_rssi(g_eeprom.rx_vfo);
+			g_update_rssi = true;
 
 			if (g_monitor_enabled)
 				BK4819_set_GPIO_pin(BK4819_GPIO6_PIN2_GREEN, true);  // LED on
@@ -1030,12 +1032,13 @@ void APP_end_tx(void)
 		#endif
 	}
 
-	g_speaker_enabled = false;
-
 	RADIO_setup_registers(false);
 
 	if (g_monitor_enabled)
 		APP_start_listening();
+
+	if (g_squelch_open || g_monitor_enabled)
+		GPIO_ClearBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
 }
 
 #ifdef ENABLE_VOX
@@ -1368,7 +1371,7 @@ void APP_cancel_user_input_modes(void)
 #if defined(ENABLE_ALARM) || defined(ENABLE_TX1750)
 	static void APP_alarm_off(void)
 	{
-		if (!g_speaker_enabled && !g_monitor_enabled)
+		if (!g_squelch_open && !g_monitor_enabled)
 			GPIO_ClearBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
 
 		if (g_eeprom.alarm_mode == ALARM_MODE_TONE)
@@ -1387,7 +1390,7 @@ void APP_cancel_user_input_modes(void)
 
 		RADIO_setup_registers(true);
 
-		if (!g_monitor_enabled && !g_speaker_enabled)
+		if (!g_squelch_open && !g_monitor_enabled)
 			GPIO_ClearBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
 		else
 			GPIO_SetBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
@@ -1596,19 +1599,14 @@ void APP_process_scan(void)
 
 void APP_process_search(void)
 {
-	uint32_t                 Result;
-	int32_t                  Delta;
-	uint16_t                 CtcssFreq;
-	BK4819_CSS_scan_result_t ScanResult;
-
 	if (g_current_display_screen != DISPLAY_SEARCH)
 		return;
 
-	g_search_freq_css_timer_10ms++;
+	g_search_freq_css_tick_10ms++;
 
-	if (g_search_delay_10ms > 0)
+	if (g_search_tick_10ms > 0)
 	{
-		if (--g_search_delay_10ms > 0)
+		if (--g_search_tick_10ms > 0)
 		{
 			APP_check_keys();
 			return;
@@ -1624,189 +1622,7 @@ void APP_process_search(void)
 	g_update_display = true;
 	GUI_SelectNextDisplay(DISPLAY_SEARCH);
 
-	switch (g_search_css_state)
-	{
-		case SEARCH_CSS_STATE_OFF:
-
-			if (g_search_freq_css_timer_10ms >= scan_freq_css_timeout_10ms)
-			{	// FREQ/CTCSS/CDCSS search timeout
-
-				if (!g_search_single_frequency)
-				{	// FREQ search timeout
-					#ifdef ENABLE_FREQ_SEARCH_TIMEOUT
-						BK4819_DisableFrequencyScan();
-
-						g_search_css_state = SEARCH_CSS_STATE_FREQ_FAILED;
-
-						AUDIO_PlayBeep(BEEP_880HZ_60MS_TRIPLE_BEEP);
-						g_update_status  = true;
-						g_update_display = true;
-						break;
-					#endif
-				}
-				else
-				{	// CTCSS/CDCSS search timeout
-					#ifdef ENABLE_CODE_SEARCH_TIMEOUT
-						BK4819_DisableFrequencyScan();
-
-						g_search_css_state = SEARCH_CSS_STATE_FREQ_FAILED;
-
-						AUDIO_PlayBeep(BEEP_880HZ_60MS_TRIPLE_BEEP);
-						g_update_status  = true;
-						g_update_display = true;
-						break;
-					#endif
-				}
-			}
-
-			if (!BK4819_GetFrequencyScanResult(&Result))
-				break;   // still scanning
-
-			// accept only within 1kHz
-			Delta = Result - g_search_frequency;
-			g_search_hit_count = (abs(Delta) < 100) ? g_search_hit_count + 1 : 0;
-
-			BK4819_DisableFrequencyScan();
-
-			g_search_frequency = Result;
-
-			if (g_search_hit_count < 3)
-			{	// keep scanning for an RF carrier
-				BK4819_EnableFrequencyScan();
-			}
-			else
-			{	// RF carrier found
-				//
-				// stop RF search and start CTCSS/CDCSS search
-
-				BK4819_SetScanFrequency(g_search_frequency);
-
-				g_search_css_result_type     = CODE_TYPE_NONE;
-				g_search_css_result_code     = 0xff;
-				g_search_hit_count           = 0;
-				g_search_use_css_result      = false;
-				g_search_freq_css_timer_10ms = 0;
-				g_search_css_state           = SEARCH_CSS_STATE_SCANNING;
-
-				g_update_status  = true;
-				g_update_display = true;
-				GUI_SelectNextDisplay(DISPLAY_SEARCH);
-			}
-
-			g_search_delay_10ms = scan_freq_css_delay_10ms;
-			break;
-
-		case SEARCH_CSS_STATE_SCANNING:
-
-			if (g_search_freq_css_timer_10ms >= scan_freq_css_timeout_10ms)
-			{	// CTCSS/CDCSS search timeout
-
-				#if defined(ENABLE_CODE_SEARCH_TIMEOUT)
-					g_search_css_state = SEARCH_CSS_STATE_FAILED;
-
-					BK4819_Disable();
-
-					AUDIO_PlayBeep(BEEP_880HZ_60MS_TRIPLE_BEEP);
-					g_update_status  = true;
-					g_update_display = true;
-					break;
-
-				#else
-					if (!g_search_single_frequency)
-					{
-						g_search_css_state = SEARCH_CSS_STATE_FAILED;
-
-						BK4819_Idle();
-
-						AUDIO_PlayBeep(BEEP_880HZ_60MS_TRIPLE_BEEP);
-						g_update_status  = true;
-						g_update_display = true;
-						break;
-					}
-				#endif
-			}
-
-			ScanResult = BK4819_GetCxCSSScanResult(&Result, &CtcssFreq);
-			if (ScanResult == BK4819_CSS_RESULT_NOT_FOUND)
-				break;
-
-			BK4819_Idle();
-
-			if (ScanResult == BK4819_CSS_RESULT_CDCSS)
-			{	// found a CDCSS code
-				const uint8_t code = DCS_GetCdcssCode(Result);
-				if (code != 0xFF)
-				{
-					g_search_hit_count       = 0;
-					g_search_css_result_type = CODE_TYPE_DIGITAL;
-					g_search_css_result_code = code;
-					g_search_css_state       = SEARCH_CSS_STATE_FOUND;
-					g_search_use_css_result  = true;
-
-					AUDIO_PlayBeep(BEEP_880HZ_60MS_TRIPLE_BEEP);
-					g_update_status  = true;
-					g_update_display = true;
-				}
-				else
-				{
-					g_search_hit_count       = 0;
-					g_search_css_result_type = CODE_TYPE_NONE;
-					g_search_css_result_code = code;
-					g_search_use_css_result  = false;
-				}
-			}
-			else
-			if (ScanResult == BK4819_CSS_RESULT_CTCSS)
-			{	// found a CTCSS tone
-				const uint8_t code = DCS_GetCtcssCode(CtcssFreq);
-				if (code != 0xFF)
-				{
-					if (code == g_search_css_result_code &&
-					    g_search_css_result_type == CODE_TYPE_CONTINUOUS_TONE)
-					{
-						if (++g_search_hit_count >= 3)
-						{
-							g_search_css_state      = SEARCH_CSS_STATE_FOUND;
-							g_search_use_css_result = true;
-
-							AUDIO_PlayBeep(BEEP_880HZ_60MS_TRIPLE_BEEP);
-							g_update_status  = true;
-							g_update_display = true;
-						}
-					}
-					else
-					{
-						g_search_hit_count       = 1;
-						g_search_css_result_type = CODE_TYPE_CONTINUOUS_TONE;
-						g_search_css_result_code = code;
-						g_search_use_css_result  = false;
-					}
-				}
-				else
-				{
-					g_search_hit_count       = 0;
-					g_search_css_result_type = CODE_TYPE_NONE;
-					g_search_css_result_code = 0xff;
-					g_search_use_css_result  = false;
-				}
-			}
-
-			if (g_search_css_state == SEARCH_CSS_STATE_OFF ||
-			    g_search_css_state == SEARCH_CSS_STATE_SCANNING)
-			{	// re-start scan
-				BK4819_SetScanFrequency(g_search_frequency);
-				g_search_delay_10ms = scan_freq_css_delay_10ms;
-			}
-
-			GUI_SelectNextDisplay(DISPLAY_SEARCH);
-			break;
-
-		//case SEARCH_CSS_STATE_FOUND:
-		//case SEARCH_CSS_STATE_FAILED:
-		//case SEARCH_CSS_STATE_REPEAT:
-		default:
-			break;
-	}
+	SEARCH_process();
 }
 
 void APP_process_transmit(void)
@@ -1858,7 +1674,6 @@ void APP_process_transmit(void)
 					BK4819_TransmitTone(true, 500);
 					SYSTEM_DelayMs(2);
 
-					g_speaker_enabled = true;
 					GPIO_SetBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
 
 					g_alarm_tone_counter_10ms = 0;
@@ -2097,7 +1912,7 @@ void APP_time_slice_500ms(void)
 		if (g_fm_radio_tick_500ms > 0)
 			g_fm_radio_tick_500ms--;
 
-		if (g_fm_radio_mode && g_current_display_screen == DISPLAY_FM && g_fm_scan_state != FM_SCAN_OFF)
+		if (g_fm_radio_mode && g_current_display_screen == DISPLAY_FM && g_fm_scan_state_dir != FM_SCAN_STATE_DIR_OFF)
 			g_update_display = true;  // can't do this if not FM scanning, it causes audio clicks
 	#endif
 
@@ -2150,7 +1965,7 @@ void APP_time_slice_500ms(void)
 	}
 
 #ifdef ENABLE_FMRADIO
-	if (g_fm_scan_state == FM_SCAN_OFF || g_ask_to_save)
+	if (g_fm_scan_state_dir == FM_SCAN_STATE_DIR_OFF || g_ask_to_save)
 #endif
 	{
 	#ifdef ENABLE_AIRCOPY
@@ -2304,13 +2119,13 @@ void APP_time_slice_500ms(void)
 			{
 				if (--g_fm_resume_tick_500ms == 0)
 				{
-					RADIO_Setg_vfo_state(VFO_STATE_NORMAL);
+					RADIO_set_vfo_state(VFO_STATE_NORMAL);
 
 					if (g_current_function != FUNCTION_RECEIVE &&
 						!g_monitor_enabled &&
 						g_fm_radio_mode)
 					{	// switch back to FM radio mode
-						FM_Start();
+						FM_turn_on();
 						GUI_SelectNextDisplay(DISPLAY_FM);
 					}
 				}
@@ -2423,7 +2238,7 @@ void APP_time_slice_10ms(void)
 
 		AUDIO_PlayBeep(BEEP_880HZ_60MS_TRIPLE_BEEP);
 
-		RADIO_Setg_vfo_state(VFO_STATE_TIMEOUT);
+		RADIO_set_vfo_state(VFO_STATE_TIMEOUT);
 
 		GUI_DisplayScreen();
 	}
@@ -2548,14 +2363,14 @@ void APP_time_slice_10ms(void)
 	APP_process_transmit();
 
 	#ifdef ENABLE_FMRADIO
-		if (g_schedule_fm                          &&
-			g_fm_scan_state    != FM_SCAN_OFF      &&
-			!g_monitor_enabled                     &&
-			g_current_function != FUNCTION_RECEIVE &&
+		if (g_fm_schedule                            &&
+			g_fm_scan_state_dir != FM_SCAN_STATE_DIR_OFF &&
+		   !g_monitor_enabled                        &&
+			g_current_function != FUNCTION_RECEIVE   &&
 			g_current_function != FUNCTION_TRANSMIT)
 		{	// switch to FM radio mode
-			FM_Play();
-			g_schedule_fm = false;
+			FM_scan();
+			g_fm_schedule = false;
 		}
 	#endif
 
@@ -2566,7 +2381,7 @@ void APP_time_slice_10ms(void)
 		{
 			if (--g_fm_restore_tick_10ms == 0)
 			{	// switch back to FM radio mode
-				FM_Start();
+				FM_turn_on();
 				GUI_SelectNextDisplay(DISPLAY_FM);
 			}
 		}
@@ -2588,7 +2403,7 @@ static void APP_process_key(const key_code_t Key, const bool key_pressed, const 
 
 	// reset the state so as to remove it from the screen
 	if (Key != KEY_INVALID && Key != KEY_PTT)
-		RADIO_Setg_vfo_state(VFO_STATE_NORMAL);
+		RADIO_set_vfo_state(VFO_STATE_NORMAL);
 #if 0
 	// remember the current backlight state (on / off)
 	const bool backlight_was_on = GPIO_CheckBit(&GPIOB->DATA, GPIOB_PIN_BACKLIGHT);
@@ -2801,7 +2616,6 @@ static void APP_process_key(const key_code_t Key, const bool key_pressed, const 
 				{
 					if (!key_pressed)
 					{
-//						g_speaker_enabled = false;
 						GPIO_ClearBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
 
 						BK4819_ExitDTMF_TX(false);
@@ -2816,7 +2630,6 @@ static void APP_process_key(const key_code_t Key, const bool key_pressed, const 
 				{
 					if (g_eeprom.dtmf_side_tone)
 					{	// user will here the DTMF tones in speaker
-//						g_speaker_enabled = true;
 						GPIO_SetBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
 					}
 
@@ -3017,7 +2830,7 @@ Skip:
 		g_vfo_rssi_bar_level[0] = 0;
 		g_vfo_rssi_bar_level[1] = 0;
 
-		if (g_speaker_enabled || g_monitor_enabled)
+		if (g_squelch_open || g_monitor_enabled)
 			APP_start_listening();
 
 		g_flag_reconfigure_vfos = false;

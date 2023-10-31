@@ -27,9 +27,8 @@ const uint8_t obfuscate_array[16] = {
 
 const uint8_t         fm_resume_500ms                  =  2500 / 500;   // 2.5 seconds
 const uint8_t         fm_radio_500ms                   =  2000 / 500;   // 2 seconds
-const uint16_t        fm_play_scan_10ms                =    40 / 10;    // 40ms
+const uint16_t        fm_play_scan_10ms                =    60 / 10;    // 60ms
 const uint16_t        fm_play_noscan_10ms              =  1200 / 10;    // 1.2 seconds
-const uint16_t        fm_restore_10ms                  =  5000 / 10;    // 5 seconds
 
 const uint8_t         menu_timeout_500ms               =  30000 / 500;  // 30 seconds
 const uint16_t        menu_timeout_long_500ms          = 120000 / 500;  // 2 minutes
@@ -43,7 +42,7 @@ const uint8_t         dtmf_txstop_500ms                =   3000 / 500;  // 6 sec
 
 const uint8_t         serial_config_tick_500ms         =   3000 / 500;  // 3 seconds
 
-const uint8_t         key_input_timeout_500ms          =   6000 / 500; // 6 seconds
+const uint8_t         key_input_timeout_500ms          =   6000 / 500;  // 6 seconds
 #ifdef ENABLE_KEYLOCK
 	const uint8_t     key_lock_timeout_500ms           =  30000 / 500;  // 30 seconds
 #endif
@@ -52,8 +51,8 @@ const uint8_t         key_debounce_10ms                =     30 / 10;   // 30ms
 const uint8_t         key_long_press_10ms              =    300 / 10;   // 300ms
 const uint8_t         key_repeat_10ms                  =     50 / 10;   // 50ms
 
-const uint16_t        scan_freq_css_timeout_10ms       =  10000 / 10;   // 10 seconds
-const uint8_t         scan_freq_css_delay_10ms         =    210 / 10;   // 210ms .. don't reduce this
+const uint16_t        search_freq_css_10ms             =  10000 / 10;   // 10 seconds
+const uint16_t        search_10ms                      =    210 / 10;   // 210ms .. don't reduce this
 
 #ifdef ENABLE_VOX
 	const uint16_t    dual_watch_delay_after_vox_10ms  =    200 / 10;   // 200ms
@@ -160,7 +159,6 @@ volatile uint16_t     g_tail_tone_elimination_tick_10ms;
 	volatile uint16_t g_noaa_tick_10ms;
 #endif
 
-bool                  g_speaker_enabled;
 uint8_t               g_key_input_count_down;
 #ifdef ENABLE_KEYLOCK
 	uint8_t           g_key_lock_tick_500ms;
@@ -261,9 +259,6 @@ volatile bool         g_next_time_slice_40ms;
 	volatile bool     g_schedule_noaa       = true;
 #endif
 volatile bool         g_flag_tail_tone_elimination_complete;
-#ifdef ENABLE_FMRADIO
-	volatile bool     g_schedule_fm;
-#endif
 
 volatile uint16_t     g_boot_tick_10ms = 4000 / 10;   // 4 seconds
 

@@ -116,7 +116,6 @@ extern const uint8_t         fm_resume_500ms;
 extern const uint8_t         fm_radio_500ms;
 extern const uint16_t        fm_play_scan_10ms;
 extern const uint16_t        fm_play_noscan_10ms;
-extern const uint16_t        fm_restore_10ms;
 
 extern const uint8_t         menu_timeout_500ms;
 extern const uint16_t        menu_timeout_long_500ms;
@@ -140,8 +139,8 @@ extern const uint8_t         key_debounce_10ms;
 extern const uint8_t         key_long_press_10ms;
 extern const uint8_t         key_repeat_10ms;
 
-extern const uint16_t        scan_freq_css_timeout_10ms;
-extern const uint8_t         scan_freq_css_delay_10ms;
+extern const uint16_t        search_freq_css_10ms;
+extern const uint16_t        search_10ms;
 
 extern const uint16_t        battery_save_count_10ms;
 
@@ -248,7 +247,7 @@ extern volatile uint16_t     g_tail_tone_elimination_tick_10ms;
 #ifdef ENABLE_NOAA
 	extern volatile uint16_t g_noaa_tick_10ms;
 #endif
-extern bool                  g_speaker_enabled;
+
 extern uint8_t               g_key_input_count_down;
 
 #ifdef ENABLE_KEYLOCK
@@ -346,9 +345,6 @@ extern volatile bool         g_next_time_slice_40ms;
 	extern volatile bool     g_schedule_noaa;
 #endif
 extern volatile bool         g_flag_tail_tone_elimination_complete;
-#ifdef ENABLE_FMRADIO
-	extern volatile bool     g_schedule_fm;
-#endif
 extern int16_t               g_current_rssi[2];   // now one per VFO
 extern volatile uint16_t     g_boot_tick_10ms;
 
