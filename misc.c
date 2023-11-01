@@ -14,8 +14,6 @@
  *     limitations under the License.
  */
 
-#include <string.h>
-
 #include "misc.h"
 #include "settings.h"
 
@@ -159,6 +157,8 @@ volatile uint16_t     g_tail_tone_elimination_tick_10ms;
 	volatile uint16_t g_noaa_tick_10ms;
 #endif
 
+uint8_t               g_update_screen_tick_500ms;
+
 uint8_t               g_key_input_count_down;
 #ifdef ENABLE_KEYLOCK
 	uint8_t           g_key_lock_tick_500ms;
@@ -201,10 +201,14 @@ bool                  g_flag_save_channel;
 #ifdef ENABLE_FMRADIO
 	bool              g_flag_save_fm;
 #endif
+
 bool                  g_cdcss_lost;
 uint8_t               g_cdcss_code_type;
 bool                  g_ctcss_lost;
 bool                  g_cxcss_tail_found;
+uint8_t               g_ctcss_tail_phase_shift_rx;
+
+
 #ifdef ENABLE_VOX
 	bool              g_vox_lost;
 	bool              g_vox_noise_detected;

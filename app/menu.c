@@ -14,8 +14,6 @@
  *     limitations under the License.
  */
 
-#include <string.h>
-
 #if !defined(ENABLE_OVERLAY)
 	#include "ARMCM0.h"
 #endif
@@ -179,13 +177,13 @@ int MENU_GetLimits(uint8_t Cursor, int32_t *pMin, int32_t *pMax)
 		case MENU_TX_CDCSS:
 			*pMin = 0;
 			*pMax = 208;
-			//*pMax = (ARRAY_SIZE(DCS_OPTIONS) * 2);
+			//*pMax = (ARRAY_SIZE(DCS_CODE_LIST) * 2);
 			break;
 
 		case MENU_RX_CTCSS:
 		case MENU_TX_CTCSS:
 			*pMin = 0;
-			*pMax = ARRAY_SIZE(CTCSS_OPTIONS) - 1;
+			*pMax = ARRAY_SIZE(CTCSS_TONE_LIST) - 1;
 			break;
 
 		case MENU_BANDWIDTH:
@@ -479,7 +477,7 @@ void MENU_AcceptSetting(void)
 				pConfig->code      = Code;
 				pConfig->code_type = CODE_TYPE_NONE;
 
-				BK4819_ExitSubAu();
+				BK4819_disable_sub_audible();
 			}
 			else
 			{
@@ -487,7 +485,7 @@ void MENU_AcceptSetting(void)
 				Code               = g_sub_menu_selection - 1;
 				pConfig->code      = Code;
 
-				BK4819_SetCTCSSFrequency(CTCSS_OPTIONS[Code]);
+				BK4819_set_CTCSS_freq(CTCSS_TONE_LIST[Code]);
 			}
 
 			g_request_save_channel = 1;
@@ -687,7 +685,7 @@ void MENU_AcceptSetting(void)
 			return;
 
 		case MENU_1_CALL:
-			g_eeprom.chan_1_call = g_sub_menu_selection;
+			g_eeprom2.config.call1 = g_sub_menu_selection;
 			break;
 
 		case MENU_S_LIST:
@@ -912,10 +910,10 @@ void MENU_SelectNextCode(void)
 
 	if (g_menu_cursor == MENU_RX_CDCSS)
 		UpperLimit = 208;
-		//UpperLimit = ARRAY_SIZE(DCS_OPTIONS);
+		//UpperLimit = ARRAY_SIZE(DCS_CODE_LIST);
 	else
 	if (g_menu_cursor == MENU_RX_CTCSS)
-		UpperLimit = ARRAY_SIZE(CTCSS_OPTIONS) - 1;
+		UpperLimit = ARRAY_SIZE(CTCSS_TONE_LIST) - 1;
 	else
 		return;
 
@@ -1162,7 +1160,7 @@ void MENU_ShowCurrentSetting(void)
 			return;
 
 		case MENU_1_CALL:
-			g_sub_menu_selection = g_eeprom.chan_1_call;
+			g_sub_menu_selection = g_eeprom2.config.call1;
 			break;
 
 		case MENU_S_LIST:

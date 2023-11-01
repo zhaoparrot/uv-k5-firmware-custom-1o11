@@ -17,6 +17,8 @@
 #ifndef MISC_H
 #define MISC_H
 
+#include <string.h>
+#include <stdlib.h>     // abs()
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -248,6 +250,8 @@ extern volatile uint16_t     g_tail_tone_elimination_tick_10ms;
 	extern volatile uint16_t g_noaa_tick_10ms;
 #endif
 
+extern uint8_t               g_update_screen_tick_500ms;
+
 extern uint8_t               g_key_input_count_down;
 
 #ifdef ENABLE_KEYLOCK
@@ -290,10 +294,13 @@ extern bool                  g_flag_save_channel;
 #ifdef ENABLE_FMRADIO
 	extern bool              g_flag_save_fm;
 #endif
+
 extern bool                  g_cdcss_lost;
 extern uint8_t               g_cdcss_code_type;
 extern bool                  g_ctcss_lost;
 extern bool                  g_cxcss_tail_found;
+extern uint8_t               g_ctcss_tail_phase_shift_rx;
+
 #ifdef ENABLE_VOX
 	extern bool              g_vox_lost;
 	extern bool              g_vox_noise_detected;

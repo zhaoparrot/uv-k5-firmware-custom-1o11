@@ -14,8 +14,6 @@
  *     limitations under the License.
  */
 
-#include <string.h>
-
 #include "app/action.h"
 #include "app/app.h"
 #ifdef ENABLE_FMRADIO
@@ -45,6 +43,8 @@
 #include "ui/main.h"
 #include "ui/menu.h"
 #include "ui/ui.h"
+
+bool g_manual_scanning;
 
 bool scanning_paused(void)
 {
@@ -410,7 +410,7 @@ void processFKeyFunction(const key_code_t Key)
 
 		case KEY_9:    // CALL
 
-			if (!RADIO_CheckValidChannel(g_eeprom.chan_1_call, false, 0))
+			if (!RADIO_CheckValidChannel(g_eeprom2.config.call1, false, 0))
 			{
 				g_beep_to_play = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
 				return;
@@ -420,12 +420,12 @@ void processFKeyFunction(const key_code_t Key)
 
 			APP_stop_scan();
 
-			g_eeprom.user_channel[Vfo]   = g_eeprom.chan_1_call;
-			g_eeprom.screen_channel[Vfo] = g_eeprom.chan_1_call;
+			g_eeprom.user_channel[Vfo]   = g_eeprom2.config.call1;
+			g_eeprom.screen_channel[Vfo] = g_eeprom2.config.call1;
 
 			#ifdef ENABLE_VOICE
 				AUDIO_SetVoiceID(0, VOICE_ID_CHANNEL_MODE);
-				AUDIO_SetDigitVoice(1, g_eeprom.chan_1_call + 1);
+				AUDIO_SetDigitVoice(1, 1 + g_eeprom2.config.call1);
 				g_another_voice_id       = (voice_id_t)0xFE;
 			#endif
 
@@ -870,15 +870,15 @@ void MAIN_Key_UP_DOWN(bool key_pressed, bool key_held, scan_state_dir_t Directio
 
 	if (key_pressed && !key_held)
 	{	// key just pressed
-		g_beep_to_play = BEEP_1KHZ_60MS_OPTIONAL;
+		g_beep_to_play    = BEEP_1KHZ_60MS_OPTIONAL;
+		g_manual_scanning = false;
 	}
 
 	if (!key_pressed)
-	{
-		if (g_scan_state_dir == SCAN_STATE_DIR_OFF &&
-		   (Channel <= USER_CHANNEL_LAST || IS_FREQ_CHANNEL(Channel)))
-		{	// key released
+	{	// key released
 
+		if (g_scan_state_dir == SCAN_STATE_DIR_OFF && (Channel <= USER_CHANNEL_LAST || IS_FREQ_CHANNEL(Channel)))
+		{
 			#ifdef ENABLE_SQ_OPEN_WITH_UP_DN_BUTTS
 				if (key_held && !monitor_was_enabled)
 				{	// re-enable the squelch
@@ -902,6 +902,8 @@ void MAIN_Key_UP_DOWN(bool key_pressed, bool key_held, scan_state_dir_t Directio
 //				UART_printf("save chan %u\r\n", g_tx_vfo->channel_save);
 			#endif
 		}
+
+		g_manual_scanning = false;
 	}
 
 	if (key_held || !key_pressed)
@@ -993,6 +995,7 @@ void MAIN_Key_UP_DOWN(bool key_pressed, bool key_held, scan_state_dir_t Directio
 
 						if (key_held && key_pressed && !monitor_was_enabled)
 						{	// open the squelch if the user holds the key down
+							g_manual_scanning = true;
 							g_monitor_enabled = true;
 							GPIO_SetBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
 //							APP_start_listening();
@@ -1010,24 +1013,25 @@ void MAIN_Key_UP_DOWN(bool key_pressed, bool key_held, scan_state_dir_t Directio
 
 			g_tx_vfo->freq_in_channel = 0xff;
 
-			#ifdef ENABLE_SQ_OPEN_WITH_UP_DN_BUTTS
-				if (!key_held && key_pressed)
-					monitor_was_enabled = g_monitor_enabled;
-
-				if (key_held && key_pressed && !monitor_was_enabled)
-				{	// open the squelch if the user holds the key down
-					g_monitor_enabled = true;
-					GPIO_SetBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
-//					APP_start_listening();
-				}
-			#endif
-
 			Next = RADIO_FindNextChannel(Channel + Direction, Direction, false, 0);
 			if (Next == 0xFF)
 				return;
 
 			if (Channel == Next)
 				return;
+
+			#ifdef ENABLE_SQ_OPEN_WITH_UP_DN_BUTTS
+				if (!key_held && key_pressed)
+					monitor_was_enabled = g_monitor_enabled;
+
+				if (key_held && key_pressed && !monitor_was_enabled)
+				{	// open the squelch if the user holds the key down
+					g_manual_scanning = true;
+					g_monitor_enabled = true;
+					GPIO_SetBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
+//					APP_start_listening();
+				}
+			#endif
 
 			g_eeprom.user_channel[g_eeprom.tx_vfo]   = Next;
 			g_eeprom.screen_channel[g_eeprom.tx_vfo] = Next;

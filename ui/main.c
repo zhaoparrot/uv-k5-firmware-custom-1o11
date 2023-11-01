@@ -14,9 +14,6 @@
  *     limitations under the License.
  */
 
-#include <string.h>
-#include <stdlib.h>  // abs()
-
 #include "app/dtmf.h"
 #ifdef ENABLE_AM_FIX_SHOW_DATA
 	#include "am_fix.h"
@@ -799,21 +796,30 @@ void UI_DisplayMain(void)
 			}
 			#else
 			{
-				strcpy(str, "  ");
-				
-				if (IS_FREQ_CHANNEL(g_eeprom.screen_channel[vfo_num]))
-				{
-					//g_eeprom.vfo_info[vfo_num].freq_in_channel = BOARD_find_channel(frequency);
-					if (g_eeprom.vfo_info[vfo_num].freq_in_channel <= USER_CHANNEL_LAST)
-					{	// the channel number that contains this VFO frequency
-						str[0] = 'F';
-					}
-				}
+				const bool is_freq_chan       = IS_FREQ_CHANNEL(g_eeprom.screen_channel[vfo_num]);
+				const uint8_t freq_in_channel = g_eeprom.vfo_info[vfo_num].freq_in_channel;
+//				const uint8_t freq_in_channel = BOARD_find_channel(frequency);  // currently way to slow
 
 				if (g_eeprom.vfo_info[vfo_num].compand)
-					str[1] = 'C';
-				
-				UI_PrintStringSmall(str, LCD_WIDTH - 1 - (6 * 2), 0, line + 1);
+				{
+					strcpy(str, "  ");
+
+					if (is_freq_chan && freq_in_channel <= USER_CHANNEL_LAST)
+						str[0] = 'F';  // channel number that contains this VFO frequency
+	
+					if (g_eeprom.vfo_info[vfo_num].compand)
+						str[1] = 'C';  // compander is enabled
+
+					UI_PrintStringSmall(str, LCD_WIDTH - (7 * 2), 0, line + 1);
+				}
+				else
+				{
+					if (is_freq_chan && freq_in_channel <= USER_CHANNEL_LAST)
+					{	// channel number that contains this VFO frequency
+						sprintf(str, "%03u", freq_in_channel);
+						UI_PrintStringSmall(str, LCD_WIDTH - (7 * 3), 0, line + 1);
+					}
+				}
 			}
 			#endif
 		}
@@ -951,7 +957,11 @@ void UI_DisplayMain(void)
 			if (mdc1200_rx_ready_tick_500ms > 0)
 			{
 				g_center_line = CENTER_LINE_MDC1200;
-				sprintf(str, "MDC1200 %02X %02X %04X", mdc1200_op, mdc1200_arg, mdc1200_unit_id);
+				#ifdef ENABLE_MDC1200_SHOW_OP_ARG
+					sprintf(str, "MDC1200 %02X %02X %04X", mdc1200_op, mdc1200_arg, mdc1200_unit_id);
+				#else
+					sprintf(str, "MDC1200 ID %04X", mdc1200_unit_id);
+				#endif
 				#ifdef ENABLE_SMALL_BOLD
 					UI_PrintStringSmallBold(str, 2, 0, 3);
 				#else
