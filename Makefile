@@ -29,7 +29,7 @@ ENABLE_NOAA                      := 0
 ENABLE_VOICE                     := 0
 ENABLE_MUTE_RADIO_FOR_VOICE      := 0
 # Tx on Voice 1.0 kB
-ENABLE_VOX                       := 0
+ENABLE_VOX                       := 1
 ENABLE_REDUCE_LOW_MID_TX_POWER   := 1
 # Tx Alarm 600 B
 ENABLE_ALARM                     := 0
@@ -225,7 +225,6 @@ OBJS += ui/menu.o
 OBJS += ui/search.o
 OBJS += ui/status.o
 OBJS += ui/ui.o
-OBJS += ui/welcome.o
 OBJS += version.o
 OBJS += main.o
 
