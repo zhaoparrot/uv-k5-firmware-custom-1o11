@@ -35,6 +35,9 @@
 
 static uint16_t gBK4819_GpioOutState;
 
+//const uint32_t rf_filter_transition_freq = 28000000;  // original
+  const uint32_t rf_filter_transition_freq = 26500000;
+
 BK4819_filter_bandwidth_t m_bandwidth = BK4819_FILTER_BW_NARROW;
 
 bool g_rx_idle_mode;
@@ -398,24 +401,29 @@ void BK4819_set_GPIO_pin(bk4819_gpio_pin_t Pin, bool bSet)
 
 void BK4819_EnableVox(uint16_t VoxEnableThreshold, uint16_t VoxDisableThreshold)
 {
-	//VOX Algorithm
-	//if (voxamp>VoxEnableThreshold)                VOX = 1;
+	// VOX Algorithm
+	//if (vox_amp > VoxEnableThreshold)                VOX = 1;
 	//else
-	//if (voxamp<VoxDisableThreshold) (After Delay) VOX = 0;
+	//if (vox_amp < VoxDisableThreshold) (After Delay) VOX = 0;
 
 	const uint16_t REG_31_Value = BK4819_ReadRegister(0x31);
 
+	if (VoxEnableThreshold  > 2047)
+		VoxEnableThreshold  = 2047;
+	if (VoxDisableThreshold > 2047)
+		VoxDisableThreshold = 2047;
+
 	// 0xA000 is undocumented?
-	BK4819_WriteRegister(0x46, 0xA000 | (VoxEnableThreshold & 0x07FF));
+	BK4819_WriteRegister(0x46, 0xA000 | VoxEnableThreshold);
 
 	// 0x1800 is undocumented?
-	BK4819_WriteRegister(0x79, 0x1800 | (VoxDisableThreshold & 0x07FF));
+	BK4819_WriteRegister(0x79, 0x1800 | VoxDisableThreshold);
 
 	// Bottom 12 bits are undocumented, 15:12 vox disable delay *128ms
 	BK4819_WriteRegister(0x7A, 0x289A); // vox disable delay = 128*5 = 640ms
 
 	// Enable VOX
-	BK4819_WriteRegister(0x31, REG_31_Value | (1u << 2));    // VOX Enable
+	BK4819_WriteRegister(0x31, REG_31_Value | (1u << 2));
 }
 
 void BK4819_set_TX_deviation(const bool narrow)
@@ -587,8 +595,8 @@ void BK4819_SetupPowerAmplifier(const uint8_t bias, const uint32_t frequency)
 	//               7 = max
 	//               0 = min
 	//
-	//                                                         280MHz     gain 1 = 1  gain 2 = 0  gain 1 = 4  gain 2 = 2
-	const uint8_t gain   = (frequency == 0) ? 0 : (frequency < 28000000) ? (1u << 3) | (0u << 0) : (4u << 3) | (2u << 0);
+	//                                                                         280MHz     gain 1 = 1  gain 2 = 0  gain 1 = 4  gain 2 = 2
+	const uint8_t gain   = (frequency == 0) ? 0 : (frequency < rf_filter_transition_freq) ? (1u << 3) | (0u << 0) : (4u << 3) | (2u << 0);
 	const uint8_t enable = 1;
 	BK4819_WriteRegister(0x36, ((uint16_t)bias << 8) | ((uint16_t)enable << 7) | ((uint16_t)gain << 0));
 }
@@ -735,7 +743,7 @@ void BK4819_RX_TurnOn(void)
 
 void BK4819_set_rf_filter_path(uint32_t Frequency)
 {
-	if (Frequency < 28000000)
+	if (Frequency < rf_filter_transition_freq)
 	{	// VHF
 		BK4819_set_GPIO_pin(BK4819_GPIO4_PIN32_VHF_LNA, true);
 		BK4819_set_GPIO_pin(BK4819_GPIO3_PIN31_UHF_LNA, false);
@@ -873,7 +881,7 @@ void BK4819_EnableDTMF(void)
 		(15u       << BK4819_REG_24_SHIFT_MAX_SYMBOLS));     // 0 ~ 15
 }
 
-void BK4819_StartTone1(const uint16_t frequency, const unsigned int level, const bool set_dac)
+void BK4819_StartTone1(const uint16_t frequency, const unsigned int level)
 {
 	GPIO_ClearBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
 	SYSTEM_DelayMs(2);
@@ -886,22 +894,12 @@ void BK4819_StartTone1(const uint16_t frequency, const unsigned int level, const
 
 	BK4819_WriteRegister(0x70, BK4819_REG_70_ENABLE_TONE1 | ((level & 0x7f) << BK4819_REG_70_SHIFT_TONE1_TUNING_GAIN));
 
-	if (set_dac)
-	{
-		BK4819_WriteRegister(0x30, 0);
-		BK4819_WriteRegister(0x30,  // all of the following must be enable to get an audio beep ! ???
-			BK4819_REG_30_ENABLE_VCO_CALIB |
-			BK4819_REG_30_ENABLE_UNKNOWN   |
-//			BK4819_REG_30_ENABLE_RX_LINK   |
-			BK4819_REG_30_ENABLE_AF_DAC    |  //
-			BK4819_REG_30_ENABLE_DISC_MODE |  //
-			BK4819_REG_30_ENABLE_PLL_VCO   |
-			BK4819_REG_30_ENABLE_PA_GAIN   |
-//			BK4819_REG_30_ENABLE_MIC_ADC   |
-			BK4819_REG_30_ENABLE_TX_DSP    |  //
-//			BK4819_REG_30_ENABLE_RX_DSP    |
-		0);
-	}
+	BK4819_WriteRegister(0x30, 0);
+	BK4819_WriteRegister(0x30,  // all of the following must be enable to get an audio beep ! ???
+		BK4819_REG_30_ENABLE_AF_DAC    |
+		BK4819_REG_30_ENABLE_DISC_MODE |
+		BK4819_REG_30_ENABLE_TX_DSP);
+
 	
 	BK4819_WriteRegister(0x71, scale_freq(frequency));
 
@@ -966,7 +964,7 @@ void BK4819_StopTones(const bool tx)
 void BK4819_PlayTone(const unsigned int tone_Hz, const unsigned int delay, const unsigned int level)
 {
 	const uint16_t prev_af = BK4819_ReadRegister(0x47);
-	BK4819_StartTone1(tone_Hz, level, true);
+	BK4819_StartTone1(tone_Hz, level);
 	SYSTEM_DelayMs(delay - 2);
 	BK4819_StopTones(g_current_function == FUNCTION_TRANSMIT);
 	BK4819_WriteRegister(0x47, prev_af);
@@ -984,9 +982,9 @@ void BK4819_PlayRoger(void)
 	#endif
 
 	const uint16_t prev_af = BK4819_ReadRegister(0x47);
-	BK4819_StartTone1(tone1_Hz, 96, true);
+	BK4819_StartTone1(tone1_Hz, 96);
 	SYSTEM_DelayMs(80 - 2);
-	BK4819_StartTone1(tone2_Hz, 96, false);
+	BK4819_StartTone1(tone2_Hz, 96);
 	SYSTEM_DelayMs(80);
 	BK4819_StopTones(true);
 	BK4819_WriteRegister(0x47, prev_af);

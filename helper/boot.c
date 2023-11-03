@@ -69,19 +69,19 @@ void BOOT_ProcessMode(boot_mode_t Mode)
 			g_eeprom.config.setting.dual_watch         = DUAL_WATCH_OFF;
 			g_eeprom.config.setting.battery_save_ratio = 0;
 			#ifdef ENABLE_VOX
-				g_eeprom.config.setting.vox_switch   = false;
+				g_eeprom.config.setting.vox_enabled    = false;
 			#endif
-			g_eeprom.config.setting.cross_vfo  = CROSS_BAND_OFF;
+			g_eeprom.config.setting.cross_vfo     = CROSS_BAND_OFF;
 			g_eeprom.config.setting.auto_key_lock = 0;
-			g_eeprom.config.setting.key1_short  = ACTION_OPT_NONE;
-			g_eeprom.config.setting.key1_long   = ACTION_OPT_NONE;
-			g_eeprom.config.setting.key2_short  = ACTION_OPT_NONE;
-			g_eeprom.config.setting.key2_long   = ACTION_OPT_NONE;
+			g_eeprom.config.setting.key1_short    = ACTION_OPT_NONE;
+			g_eeprom.config.setting.key1_long     = ACTION_OPT_NONE;
+			g_eeprom.config.setting.key2_short    = ACTION_OPT_NONE;
+			g_eeprom.config.setting.key2_long     = ACTION_OPT_NONE;
 
 			RADIO_InitInfo(g_rx_vfo, FREQ_CHANNEL_LAST - 1, g_aircopy_freq);
 
-			g_rx_vfo->channel_bandwidth        = BANDWIDTH_WIDE;
-			g_rx_vfo->output_power             = OUTPUT_POWER_LOW;
+			g_rx_vfo->channel_bandwidth = BANDWIDTH_WIDE;
+			g_rx_vfo->output_power      = OUTPUT_POWER_LOW;
 
 			RADIO_ConfigureSquelchAndOutputPower(g_rx_vfo);
 

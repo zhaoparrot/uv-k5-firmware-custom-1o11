@@ -31,6 +31,9 @@
 #if defined(ENABLE_UART) && defined(ENABLE_UART_DEBUG)
 	#include "driver/uart.h"
 #endif
+#ifdef ENABLE_SCAN_IGNORE_LIST
+	#include "freq_ignore.h"
+#endif
 #include "functions.h"
 #include "misc.h"
 #include "settings.h"
@@ -76,11 +79,11 @@ static void ACTION_FlashLight(void)
 
 void ACTION_Power(void)
 {
-	if (++g_tx_vfo->output_power > OUTPUT_POWER_HIGH)
-		g_tx_vfo->output_power = OUTPUT_POWER_LOW;
+	if (++g_tx_vfo->channel.tx_power > OUTPUT_POWER_HIGH)
+		g_tx_vfo->channel.tx_power = OUTPUT_POWER_LOW;
 
 	#if defined(ENABLE_UART) && defined(ENABLE_UART_DEBUG)
-//		UART_printf("act_pwr %u\r\n", g_tx_vfo->output_power);
+//		UART_printf("act_pwr %u\r\n", g_tx_vfo->channel.tx_power);
 	#endif
 
 	g_request_save_channel = 1;
@@ -247,6 +250,10 @@ void ACTION_Scan(bool bRestart)
 
 			// start scanning
 	
+			#ifdef ENABLE_SCAN_IGNORE_LIST
+				FI_clear_freq_ignored();
+			#endif
+
 			g_monitor_enabled = false;
 			GPIO_ClearBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
 
@@ -300,9 +307,10 @@ void ACTION_Scan(bool bRestart)
 #ifdef ENABLE_VOX
 	void ACTION_Vox(void)
 	{
-		g_eeprom.config.setting.vox_switch = (g_eeprom.config.setting.vox_switch + 1) & 1u;
-		g_request_save_settings     = true;
-		g_flag_reconfigure_vfos     = true;
+		// toggle VOX on/off
+		g_eeprom.config.setting.vox_enabled = (g_eeprom.config.setting.vox_enabled + 1) & 1u;
+		g_request_save_settings = true;
+		g_flag_reconfigure_vfos = true;
 		#ifdef ENABLE_VOICE
 			g_another_voice_id = VOICE_ID_VOX;
 		#endif

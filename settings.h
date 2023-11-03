@@ -20,8 +20,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "misc.h"
+#include "dcs.h"
 #include "frequencies.h"
-#include "radio.h"
 
 enum pwr_on_display_mode_e {
 	PWR_ON_DISPLAY_MODE_FULL_SCREEN = 0,
@@ -121,6 +122,46 @@ enum mdf_display_mode_e {
 };
 typedef enum mdf_display_mode_e mdf_display_mode_t;
 
+/*
+enum {
+	RADIO_CHANNEL_UP   = 0x01u,
+	RADIO_CHANNEL_DOWN = 0xFFu,
+};
+*/
+enum {
+	BANDWIDTH_WIDE = 0,
+	BANDWIDTH_NARROW
+};
+
+enum ptt_id_e {
+	PTT_ID_OFF = 0,    // OFF
+	PTT_ID_TX_UP,      // BEGIN OF TX
+	PTT_ID_TX_DOWN,    // END OF TX
+	PTT_ID_BOTH,       // BOTH
+	PTT_ID_APOLLO      // Apolo quindar tones
+};
+typedef enum ptt_id_e ptt_id_t;
+
+enum mdc1200_mode_e {
+	MDC1200_MODE_OFF = 0, // OFF
+	MDC1200_MODE_BOT,     // BEGIN OF TX
+	MDC1200_MODE_EOT,     // END OF TX
+	MDC1200_MODE_BOTH     // BOTH
+};
+typedef enum mdc1200_mode_e mdc1200_mode_t;
+
+enum vfo_state_e
+{
+	VFO_STATE_NORMAL = 0,
+	VFO_STATE_BUSY,
+	VFO_STATE_BAT_LOW,
+	VFO_STATE_TX_DISABLE,
+	VFO_STATE_TIMEOUT,
+	VFO_STATE_ALARM,
+	VFO_STATE_VOLTAGE_HIGH
+};
+typedef enum vfo_state_e vfo_state_t;
+
 // ************************************************
 // this is the full eeprom structure, both config and calibration areas
 
@@ -150,11 +191,11 @@ typedef struct {
 		uint8_t unused3:2;                   //
 	#endif
 	#if 0
-		uint8_t  am_mode:1;                  //
-		uint8_t  unused4:3;                  //
-	#else
-		uint8_t  am_mode:2;                  //
-		uint8_t  unused4:2;                  //
+		uint8_t am_mode:1;                   //  FM/AM
+		uint8_t unused4:3;                   //
+	#else                          
+		uint8_t am_mode:2;                   //  FM/AM/DSB
+		uint8_t unused4:2;                   //
 	#endif
 	// [12]
 	uint8_t  frequency_reverse:1;            // reverse repeater
@@ -196,6 +237,11 @@ typedef union {
 	uint8_t attributes;
 } __attribute__((packed)) t_channel_attrib;
 
+typedef struct {
+	char         name[10];
+	uint8_t      unused[6];
+} __attribute__((packed)) t_channel_name;
+
 // user configuration
 typedef struct {
 
@@ -214,12 +260,9 @@ typedef struct {
 	} __attribute__((packed));
 
 	// 0x0D60
-	t_channel_attrib channel_attributes[USER_CHANNEL_LAST - USER_CHANNEL_FIRST + 1];
+	t_channel_attrib   channel_attributes[200 + 7 + 1]; // last byte = 0x00
 
 	struct {
-		// 0x0E28
-		uint8_t        unused1[8];                      // 0xff's
-
 		// 0x0E30
 		uint8_t        unused2[16];                     // 0xff's
 
@@ -233,7 +276,7 @@ typedef struct {
 		uint8_t        tx_timeout;                      //
 		uint8_t        noaa_auto_scan;                  //
 		uint8_t        key_lock;                        //
-		uint8_t        vox_switch;                      //
+		uint8_t        vox_enabled;                     //
 		uint8_t        vox_level;                       //
 		uint8_t        mic_sensitivity;                 //
 		#ifdef ENABLE_CONTRAST
@@ -371,10 +414,7 @@ typedef struct {
 	}  __attribute__((packed)) setting;
 
 	// 0x0F50
-	struct {
-		char       name[10];
-		uint8_t    unused[6];             // 0xff's
-	} __attribute__((packed)) channel_name[USER_CHANNEL_LAST - USER_CHANNEL_FIRST + 1];
+	t_channel_name channel_name[USER_CHANNEL_LAST - USER_CHANNEL_FIRST + 1];
 
 	// 0x1BD0
 	uint8_t        unused13[16 * 3];      // 0xff's .. free to use
@@ -469,8 +509,46 @@ typedef struct {
 
 // ************************************************
 
-extern t_eeprom         g_eeprom;
-extern t_channel_attrib g_user_channel_attributes[FREQ_CHANNEL_LAST + 1];
+typedef struct
+{
+	uint32_t        frequency;
+	dcs_code_type_t code_type;
+	uint8_t         code;
+} freq_config_t;
+
+typedef struct vfo_info_t
+{
+	t_channel        channel;
+	t_channel_attrib channel_attributes;
+	t_channel_name   channel_name;
+
+	uint8_t          channel_save;
+
+	freq_config_t    freq_config_rx;
+	freq_config_t    freq_config_tx;
+	freq_config_t   *p_rx;
+	freq_config_t   *p_tx;
+
+	uint16_t         step_freq;
+
+	uint8_t          freq_in_channel; // first channel number we found this VFO's frequency in
+
+	uint8_t          squelch_open_rssi_thresh;
+	uint8_t          squelch_close_rssi_thresh;
+
+	uint8_t          squelch_open_noise_thresh;
+	uint8_t          squelch_close_noise_thresh;
+
+	uint8_t          squelch_open_glitch_thresh;
+	uint8_t          squelch_close_glitch_thresh;
+
+	uint8_t          txp_calculated_setting;
+
+} vfo_info_t;
+
+// ************************************************
+
+extern t_eeprom g_eeprom;
 
 void SETTINGS_read_eeprom(void);
 void SETTINGS_write_eeprom_config(void);
@@ -480,7 +558,7 @@ void SETTINGS_write_eeprom_config(void);
 #endif
 void SETTINGS_save_vfo_indices(void);
 void SETTINGS_save(void);
-void SETTINGS_save_channel(const unsigned int channel, const unsigned int vfo, const vfo_info_t *p_vfo, const unsigned int mode);
+void SETTINGS_save_channel(const unsigned int channel, const unsigned int vfo, vfo_info_t *p_vfo, const unsigned int mode);
 void SETTINGS_save_chan_attribs_name(const unsigned int channel, const vfo_info_t *p_vfo);
 
 unsigned int SETTINGS_find_channel(const uint32_t frequency);

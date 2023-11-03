@@ -55,6 +55,7 @@ void draw_bar(uint8_t *line, const int len, const int max_width)
 		for (i = 0; i < max_width; i += 2)
 			line[i] = (i <= len) ? 0x7f : 0x41;
 	#else
+
 		// segmented bar
 		for (i = 0; i < max_width; i += 4)
 		{
@@ -63,70 +64,20 @@ void draw_bar(uint8_t *line, const int len, const int max_width)
 				if (k >= 0)
 //					line[k] = (k < (i - 1)) ? 0x7f : 0x00;
 					if (k < (i - 1))
-						line[k] = 0x3e;
+						line[k] = 0x7f;
+//						line[k] = 0x3e;
 			}
 		}
-		// top/bottom lines
-		for (i = 0; i < len; i += 2)
-			line[i] |= 0x41;
-		for (i &= ~3u ; i < max_width; i += 4)
-			line[i] = 0x41;
+
+		#if 0
+			// top/bottom lines
+			for (i = 0; i < len; i += 2)
+				line[i] |= 0x41;
+			for (i &= ~3u ; i < max_width; i += 4)
+				line[i] = 0x41;
+		#endif
 	#endif
 }
-
-#ifdef ENABLE_TX_TIMEOUT_BAR
-	bool UI_DisplayTXCountdown(const bool now)
-	{
-		unsigned int timeout_secs = 0;
-
-		if (g_current_function != FUNCTION_TRANSMIT || g_current_display_screen != DISPLAY_MAIN)
-			return false;
-
-		if (g_center_line != CENTER_LINE_NONE && g_center_line != CENTER_LINE_TX_TIMEOUT)
-			return false;
-
-		if (g_eeprom.config.setting.tx_timeout == 0)
-			timeout_secs = 30;   // 30 sec
-		else
-		if (g_eeprom.config.setting.tx_timeout < (ARRAY_SIZE(g_sub_menu_tx_timeout) - 1))
-			timeout_secs = 60 * g_eeprom.config.setting.tx_timeout;  // minutes
-		else
-			timeout_secs = 60 * 15;  // 15 minutes
-
-		if (timeout_secs == 0 || g_tx_timer_tick_500ms == 0)
-			return false;
-
-		{
-			const unsigned int line      = 3;
-			const unsigned int txt_width = 7 * 6;                 // 6 text chars
-			const unsigned int bar_x     = 2 + txt_width + 4;     // X coord of bar graph
-			const unsigned int bar_width = LCD_WIDTH - 1 - bar_x;
-			const unsigned int secs      = g_tx_timer_tick_500ms / 2;
-			const unsigned int level     = ((secs * bar_width) + (timeout_secs / 2)) / timeout_secs;   // with rounding
-//			const unsigned int level     = (((timeout_secs - secs) * bar_width) + (timeout_secs / 2)) / timeout_secs;   // with rounding
-			const unsigned int len       = (level <= bar_width) ? level : bar_width;
-			uint8_t           *p_line    = g_frame_buffer[line];
-			char               s[17];
-
-			if (now)
-				memset(p_line, 0, LCD_WIDTH);
-
-			sprintf(s, "TX %u", secs);
-			#ifdef ENABLE_SMALL_BOLD
-				UI_PrintStringSmallBold(s, 2, 0, line);
-			#else
-				UI_PrintStringSmall(s, 2, 0, line);
-			#endif
-
-			draw_bar(p_line + bar_x, len, bar_width);
-
-			if (now)
-				ST7565_BlitFullScreen();
-		}
-
-		return true;
-	}
-#endif
 
 void UI_drawBars(uint8_t *p, const unsigned int level)
 {
@@ -236,7 +187,7 @@ uint8_t  LastIncomeChannel = 0;
 			const int16_t      s0_dBm       = -147;                  // S0 .. base level
 
 			const int16_t      s9_dBm       = s0_dBm + (6 * 9);      // S9 .. 6dB/S-Point
-			const int16_t      bar_max_dBm  = s9_dBm + 30;           // S9+30dB
+			const int16_t      bar_max_dBm  = s9_dBm + 60;           // S9+60dB
 //			const int16_t      bar_min_dBm  = s0_dBm + (6 * 0);      // S0
 			const int16_t      bar_min_dBm  = s0_dBm + (6 * 4);      // S4
 
@@ -296,15 +247,14 @@ uint8_t  LastIncomeChannel = 0;
 
 void UI_update_rssi(const int16_t rssi, const int vfo)
 {
-#ifdef ENABLE_RX_SIGNAL_BAR
-	if (g_center_line == CENTER_LINE_RSSI)
-	{	// optional larger RSSI dBm, S-point and bar level
-		if (g_current_function == FUNCTION_RECEIVE && g_squelch_open)
-		{
-			UI_DisplayRSSIBar(rssi, true);
+	#ifdef ENABLE_RX_SIGNAL_BAR
+		if (g_center_line == CENTER_LINE_RSSI)
+		{	// optional larger RSSI dBm, S-point and bar level
+			//if (g_current_function == FUNCTION_RECEIVE && g_squelch_open)
+			if (g_current_function == FUNCTION_RECEIVE)
+				UI_DisplayRSSIBar(rssi, true);
 		}
-	}
-#endif
+	#endif
 
 	{	// original little RS bars
 
@@ -316,7 +266,7 @@ void UI_update_rssi(const int16_t rssi, const int vfo)
 		// TODO: sort out all 8 values from the eeprom
 
 		#if 1
-			const unsigned int band = g_rx_vfo->band;
+			const unsigned int band = g_rx_vfo->channel_attributes.band;
 			const int16_t level0  = g_eeprom_rssi_calib[band][0];
 			const int16_t level1  = g_eeprom_rssi_calib[band][1];
 			const int16_t level2  = g_eeprom_rssi_calib[band][2];
@@ -761,13 +711,11 @@ void UI_DisplayMain(void)
 
 				unsigned int x = LCD_WIDTH - 1 - sizeof(BITMAP_SCANLIST2) - sizeof(BITMAP_SCANLIST1);
 
-				const t_channel_attrib attributes = g_user_channel_attributes[scrn_chan];
-
-				if (attributes.scanlist1)
+				if (g_vfo_info[vfo_num].channel_attributes.scanlist1)
 					memcpy(p_line0 + x, BITMAP_SCANLIST1, sizeof(BITMAP_SCANLIST1));
 				x += sizeof(BITMAP_SCANLIST1);
 
-				if (attributes.scanlist2)
+				if (g_vfo_info[vfo_num].channel_attributes.scanlist2)
 					memcpy(p_line0 + x, BITMAP_SCANLIST2, sizeof(BITMAP_SCANLIST2));
 				//x += sizeof(BITMAP_SCANLIST2);
 			}
@@ -791,7 +739,7 @@ void UI_DisplayMain(void)
 				}
 				x += smallest_char_spacing * 4;
 
-				if (g_vfo_info[vfo_num].compand)
+				if (g_vfo_info[vfo_num].channel.compand)
 					UI_PrintStringSmallest("C", x, (line + 0) * 8, false, true);
 				//x += smallest_char_spacing * 1;
 			}
@@ -801,14 +749,14 @@ void UI_DisplayMain(void)
 				const uint8_t freq_in_channel = g_vfo_info[vfo_num].freq_in_channel;
 //				const uint8_t freq_in_channel = SETTINGS_find_channel(frequency);  // currently way to slow
 
-				if (g_vfo_info[vfo_num].compand)
+				if (g_vfo_info[vfo_num].channel.compand)
 				{
 					strcpy(str, "  ");
 
 					if (is_freq_chan && freq_in_channel <= USER_CHANNEL_LAST)
 						str[0] = 'F';  // channel number that contains this VFO frequency
 	
-					if (g_vfo_info[vfo_num].compand)
+					if (g_vfo_info[vfo_num].channel.compand)
 						str[1] = 'C';  // compander is enabled
 
 					UI_PrintStringSmall(str, LCD_WIDTH - (7 * 2), 0, line + 1);
@@ -832,7 +780,7 @@ void UI_DisplayMain(void)
 
 			if (mode == 1)
 			{	// TX power level
-				switch (g_rx_vfo->output_power)
+				switch (g_rx_vfo->channel.tx_power)
 				{
 					case OUTPUT_POWER_LOW:  Level = 2; break;
 					case OUTPUT_POWER_MID:  Level = 4; break;
@@ -852,10 +800,10 @@ void UI_DisplayMain(void)
 		// ************
 
 		str[0] = '\0';
-		if (g_vfo_info[vfo_num].am_mode > 0)
+		if (g_vfo_info[vfo_num].channel.am_mode > 0)
 		{
-			//strcpy(str, g_sub_menu_mod_mode[g_vfo_info[vfo_num].am_mode]);
-			switch (g_vfo_info[vfo_num].am_mode)
+			//strcpy(str, g_sub_menu_mod_mode[g_vfo_info[vfo_num].channel.am_mode]);
+			switch (g_vfo_info[vfo_num].channel.am_mode)
 			{
 				default:
 				case 0: strcpy(str, "FM"); break;
@@ -871,62 +819,62 @@ void UI_DisplayMain(void)
 			if (code_type < ARRAY_SIZE(code_list))
 				strcpy(str, code_list[code_type]);
 		}
-		UI_PrintStringSmall(str, LCD_WIDTH + 24, 0, line + 1);
+		UI_PrintStringSmall(str, 24, 0, line + 2);
 
 		#ifdef ENABLE_TX_WHEN_AM
 			if (state == VFO_STATE_NORMAL || state == VFO_STATE_ALARM)
 		#else
-			if ((state == VFO_STATE_NORMAL || state == VFO_STATE_ALARM) && g_vfo_info[vfo_num].am_mode == 0) // not allowed to TX if not in FM mode
+			if ((state == VFO_STATE_NORMAL || state == VFO_STATE_ALARM) && g_vfo_info[vfo_num].channel.am_mode == 0) // TX allowed only when FM
 		#endif
 		{
 			if (FREQUENCY_tx_freq_check(g_vfo_info[vfo_num].p_tx->frequency) == 0)
 			{
 				// show the TX power
 				const char pwr_list[] = "LMH";
-				const unsigned int i = g_vfo_info[vfo_num].output_power;
+				const unsigned int i = g_vfo_info[vfo_num].channel.tx_power;
 				str[0] = (i < ARRAY_SIZE(pwr_list)) ? pwr_list[i] : '\0';
 				str[1] = '\0';
-				UI_PrintStringSmall(str, LCD_WIDTH + 46, 0, line + 1);
+				UI_PrintStringSmall(str, 46, 0, line + 2);
 		
 				if (g_vfo_info[vfo_num].freq_config_rx.frequency != g_vfo_info[vfo_num].freq_config_tx.frequency)
 				{	// show the TX offset symbol
 					const char dir_list[] = "\0+-";
-					const unsigned int i = g_vfo_info[vfo_num].tx_offset_freq_dir;
+					const unsigned int i = g_vfo_info[vfo_num].channel.tx_offset_dir;
 					str[0] = (i < sizeof(dir_list)) ? dir_list[i] : '?';
 					str[1] = '\0';
-					UI_PrintStringSmall(str, LCD_WIDTH + 54, 0, line + 1);
+					UI_PrintStringSmall(str, 54, 0, line + 2);
 				}
 			}
 		}
 		
 		// show the TX/RX reverse symbol
-		if (g_vfo_info[vfo_num].frequency_reverse)
-			UI_PrintStringSmall("R", LCD_WIDTH + 62, 0, line + 1);
+		if (g_vfo_info[vfo_num].channel.frequency_reverse)
+			UI_PrintStringSmall("R", 62, 0, line + 2);
 
 		{	// show the narrow band symbol
 			str[0] = '\0';
-			if (g_vfo_info[vfo_num].channel_bandwidth == BANDWIDTH_NARROW)
+			if (g_vfo_info[vfo_num].channel.channel_bandwidth == BANDWIDTH_NARROW)
 			{
 				str[0] = 'N';
 				str[1] = '\0';
 			}
-			UI_PrintStringSmall(str, LCD_WIDTH + 70, 0, line + 1);
+			UI_PrintStringSmall(str, 70, 0, line + 2);
 		}
 
 		// show the DTMF decoding symbol
 		#ifdef ENABLE_KILL_REVIVE
-			if (g_vfo_info[vfo_num].dtmf_decoding_enable || g_eeprom.config.setting.radio_disabled)
-				UI_PrintStringSmall("DTMF", LCD_WIDTH + 78, 0, line + 1);
+			if (g_vfo_info[vfo_num].channel.dtmf_decoding_enable || g_eeprom.config.setting.radio_disabled)
+				UI_PrintStringSmall("DTMF", 78, 0, line + 2);
 		#else
-			if (g_vfo_info[vfo_num].dtmf_decoding_enable)
-				UI_PrintStringSmall("DTMF", LCD_WIDTH + 78, 0, line + 1);
-				//UI_PrintStringSmall4x5("DTMF", LCD_WIDTH + 78, 0, line + 1);   // font table is currently wrong
-				//UI_PrintStringSmallest("DTMF", LCD_WIDTH + 78, (line + 1) * 8, false, true);
+			if (g_vfo_info[vfo_num].channel.dtmf_decoding_enable)
+				UI_PrintStringSmall("DTMF", 78, 0, line + 2);
+				//UI_PrintStringSmall4x5("DTMF", 78, 0, line + 2);   // font table is currently wrong
+				//UI_PrintStringSmallest("DTMF", 78, (line + 2) * 8, false, true);
 		#endif
 
 		// show the audio scramble symbol
-		if (g_vfo_info[vfo_num].scrambling_type > 0 && g_eeprom.config.setting.enable_scrambler)
-			UI_PrintStringSmall("SCR", LCD_WIDTH + 106, 0, line + 1);
+		if (g_vfo_info[vfo_num].channel.scrambler > 0 && g_eeprom.config.setting.enable_scrambler)
+			UI_PrintStringSmall("SCR", 106, 0, line + 2);
 	}
 
 	if (g_center_line == CENTER_LINE_NONE &&
@@ -934,16 +882,8 @@ void UI_DisplayMain(void)
 		g_dtmf_call_state == DTMF_CALL_STATE_NONE)
 	{	// we're free to use the middle line
 
-		const bool rx = (g_current_function == FUNCTION_RECEIVE && g_squelch_open) ? true : false;
-
-		#ifdef ENABLE_TX_TIMEOUT_BAR
-			// show the TX timeout count down
-			if (UI_DisplayTXCountdown(false))
-			{
-				g_center_line = CENTER_LINE_TX_TIMEOUT;
-			}
-			else
-		#endif
+//		const bool rx = (g_current_function == FUNCTION_RECEIVE && g_squelch_open) ? true : false;
+		const bool rx = (g_current_function == FUNCTION_RECEIVE) ? true : false;
 
 		#ifdef ENABLE_TX_AUDIO_BAR
 			// show the TX audio level

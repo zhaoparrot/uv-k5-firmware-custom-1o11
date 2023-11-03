@@ -1,4 +1,4 @@
-/* Copyright 2023 Dual Tachyon
+/* Copyright 2023 One of Eleven
  * https://github.com/DualTachyon
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,28 +14,17 @@
  *     limitations under the License.
  */
 
-#ifndef UI_MAIN_H
-#define UI_MAIN_H
+#ifndef FREQ_IGNORE_H
+#define FREQ_IGNORE_H
 
-enum center_line_e {
-	CENTER_LINE_NONE = 0,
-	CENTER_LINE_IN_USE,
-	CENTER_LINE_AUDIO_BAR,
-	CENTER_LINE_RSSI,
-	CENTER_LINE_AM_FIX_DATA,
-	CENTER_LINE_DTMF_DEC,
-	CENTER_LINE_CHARGE_DATA,
-	CENTER_LINE_MDC1200
-};
-typedef enum center_line_e center_line_t;
+#include <stdint.h>
 
-extern center_line_t g_center_line;
-
-#ifdef ENABLE_TX_AUDIO_BAR
-	bool UI_DisplayAudioBar(const bool now);
+#ifdef ENABLE_SCAN_IGNORE_LIST
+	void FI_clear_freq_ignored(void);
+	int  FI_freq_ignored(const uint32_t frequency);
+	void FI_add_freq_ignored(const uint32_t frequency);
+	void FI_sub_freq_ignored(const uint32_t frequency);
 #endif
-void UI_update_rssi(const int16_t rssi, const int vfo);
-void UI_DisplayMain(void);
 
 #endif
 
