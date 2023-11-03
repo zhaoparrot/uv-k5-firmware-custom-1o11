@@ -47,7 +47,7 @@ enum StepsCount {
 typedef enum ModulationType {
     MOD_FM,
     MOD_AM,
-    MOD_USB,
+    //MOD_USB,
 } ModulationType;
 
 enum ScanStep {
@@ -298,17 +298,18 @@ static void SetModulation(ModulationType type) {
         case MOD_AM:
             reg |= 0x7 << 8;
             break;
-        case MOD_USB:
+   /*     case MOD_USB:
             reg |= 0x5 << 8;
-            break;
+            break;*/
     }
-    if (type == MOD_USB) {
-        BK4819_WriteRegister(0x3D, 0x56A5);
-        BK4819_WriteRegister(0x37, 0x160F);
-        BK4819_WriteRegister(0x48, 0x03A8);
-        BK4819_WriteRegister(0x4B, R4B | (1 << 5));
-        BK4819_WriteRegister(0x7E, R7E);
-    } else if (type == MOD_AM) {
+    //if (type == MOD_USB) {
+    //    BK4819_WriteRegister(0x3D, 0x56A5);
+    //    BK4819_WriteRegister(0x37, 0x160F);
+    //    BK4819_WriteRegister(0x48, 0x03A8);
+    //    BK4819_WriteRegister(0x4B, R4B | (1 << 5));
+    //    BK4819_WriteRegister(0x7E, R7E);
+    //} else
+        if (type == MOD_AM) {
         uint16_t r7e = BK4819_ReadRegister(0x7E);
         r7e &= ~(0x7);
         r7e |= 0x5;
@@ -765,7 +766,7 @@ static void OnKeyDown(uint8_t key) {
             FreqInput();
             break;
         case KEY_0:
-            if (settings.modulationType < MOD_USB) {
+            if (settings.modulationType < MOD_AM) {
                 settings.modulationType++;
             } else {
                 settings.modulationType = MOD_FM;

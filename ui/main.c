@@ -593,7 +593,7 @@ void UI_DisplayMain(void)
 				#else
 					UI_PrintStringSmall("RX", 14, 0, line);
 				#endif
-					LastIncomeChannel = g_eeprom.rx_vfo;
+					LastIncomeChannel = g_rx_vfo_num;
 					// invert the text pixels
 					for (int i = 12; i < 13 + (8 * 2); i++)
 					{
