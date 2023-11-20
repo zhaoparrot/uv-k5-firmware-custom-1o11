@@ -26,11 +26,17 @@
 #include "external/printf/printf.h"
 #include "font.h"
 #include "functions.h"
+#ifdef ENABLE_SCAN_IGNORE_LIST
+	#include "freq_ignore.h"
+#endif
 #include "helper/battery.h"
 #ifdef ENABLE_MDC1200
 	#include "mdc1200.h"
 #endif
 #include "misc.h"
+#ifdef ENABLE_PANADAPTER
+	#include "panadapter.h"
+#endif
 #include "radio.h"
 #include "settings.h"
 #include "ui/helper.h"
@@ -39,9 +45,35 @@
 #include "ui/menu.h"
 #include "ui/ui.h"
 
+//#define SHOW_RX_TEST_VALUES
+
+//const int     rssi_offset_band_123  = 0;
+//const int     rssi_offset_band_4567 = 0;
+
+const int     rssi_offset_band_123  = -44;
+const int     rssi_offset_band_4567 = -18;
+
+int           single_vfo = -1;
+
 center_line_t g_center_line = CENTER_LINE_NONE;
 
 // ***************************************************************************
+
+void draw_small_antenna_bars(uint8_t *p, unsigned int level)
+{
+	unsigned int i;
+
+	if (level > 6)
+		level = 6;
+
+	memcpy(p, BITMAP_ANTENNA, ARRAY_SIZE(BITMAP_ANTENNA));
+
+	for (i = 1; i <= level; i++)
+	{
+		const uint8_t bar = (0xff << (6 - i)) & 0x7F;
+		memset(p + 2 + (i * 3), bar, 2);
+	}
+}
 
 void draw_bar(uint8_t *line, const int len, const int max_width)
 {
@@ -55,50 +87,36 @@ void draw_bar(uint8_t *line, const int len, const int max_width)
 		for (i = 0; i < max_width; i += 2)
 			line[i] = (i <= len) ? 0x7f : 0x41;
 	#else
-
 		// segmented bar
 		for (i = 0; i < max_width; i += 4)
-		{
 			for (int k = i - 4; k < i && k < len; k++)
-			{
 				if (k >= 0)
 //					line[k] = (k < (i - 1)) ? 0x7f : 0x00;
 					if (k < (i - 1))
 						line[k] = 0x7f;
-//						line[k] = 0x3e;
-			}
-		}
-
-		#if 0
-			// top/bottom lines
-			for (i = 0; i < len; i += 2)
-				line[i] |= 0x41;
-			for (i &= ~3u ; i < max_width; i += 4)
-				line[i] = 0x41;
-		#endif
 	#endif
 }
 
-void UI_drawBars(uint8_t *p, const unsigned int level)
-{
-	#pragma GCC diagnostic push
-	#pragma GCC diagnostic ignored "-Wimplicit-fallthrough="
-
-	switch (level)
-	{
-		default:
-		case 7: memcpy(p + 20, BITMAP_ANTENNA_LEVEL6, sizeof(BITMAP_ANTENNA_LEVEL6));
-		case 6: memcpy(p + 17, BITMAP_ANTENNA_LEVEL5, sizeof(BITMAP_ANTENNA_LEVEL5));
-		case 5: memcpy(p + 14, BITMAP_ANTENNA_LEVEL4, sizeof(BITMAP_ANTENNA_LEVEL4));
-		case 4: memcpy(p + 11, BITMAP_ANTENNA_LEVEL3, sizeof(BITMAP_ANTENNA_LEVEL3));
-		case 3: memcpy(p +  8, BITMAP_ANTENNA_LEVEL2, sizeof(BITMAP_ANTENNA_LEVEL2));
-		case 2: memcpy(p +  5, BITMAP_ANTENNA_LEVEL1, sizeof(BITMAP_ANTENNA_LEVEL1));
-		case 1: memcpy(p +  0, BITMAP_ANTENNA,        sizeof(BITMAP_ANTENNA)); break;
-		case 0: memset(p +  0, 0,                     sizeof(BITMAP_ANTENNA)); break;
-	}
-
-	#pragma GCC diagnostic pop
-}
+//void UI_drawBars(uint8_t *p, const unsigned int level)
+//{
+//	#pragma GCC diagnostic push
+//	#pragma GCC diagnostic ignored "-Wimplicit-fallthrough="
+//
+//	switch (level)
+//	{
+//		default:
+//		case 7: memcpy(p + 20, BITMAP_ANTENNA_LEVEL6, sizeof(BITMAP_ANTENNA_LEVEL6));
+//		case 6: memcpy(p + 17, BITMAP_ANTENNA_LEVEL5, sizeof(BITMAP_ANTENNA_LEVEL5));
+//		case 5: memcpy(p + 14, BITMAP_ANTENNA_LEVEL4, sizeof(BITMAP_ANTENNA_LEVEL4));
+//		case 4: memcpy(p + 11, BITMAP_ANTENNA_LEVEL3, sizeof(BITMAP_ANTENNA_LEVEL3));
+//		case 3: memcpy(p +  8, BITMAP_ANTENNA_LEVEL2, sizeof(BITMAP_ANTENNA_LEVEL2));
+//		case 2: memcpy(p +  5, BITMAP_ANTENNA_LEVEL1, sizeof(BITMAP_ANTENNA_LEVEL1));
+//		case 1: memcpy(p +  0, BITMAP_ANTENNA,        sizeof(BITMAP_ANTENNA)); break;
+//		case 0: memset(p +  0, 0,                     sizeof(BITMAP_ANTENNA)); break;
+//	}
+//
+//	#pragma GCC diagnostic pop
+//}
 uint8_t  LastIncomeChannel = 0;
 #ifdef ENABLE_TX_AUDIO_BAR
 
@@ -179,136 +197,176 @@ uint8_t  LastIncomeChannel = 0;
 #endif
 
 #ifdef ENABLE_RX_SIGNAL_BAR
-	bool UI_DisplayRSSIBar(const int16_t rssi, const bool now)
+	bool UI_DisplayRSSIBar(const int rssi, const unsigned int glitch, const unsigned int noise, const bool now)
 	{
 		if (g_eeprom.config.setting.enable_rssi_bar)
 		{
-//			const int16_t      s0_dBm       = -127;                  // S0 .. base level
-			const int16_t      s0_dBm       = -147;                  // S0 .. base level
+			#ifdef SHOW_RX_TEST_VALUES
 
-			const int16_t      s9_dBm       = s0_dBm + (6 * 9);      // S9 .. 6dB/S-Point
-			const int16_t      bar_max_dBm  = s9_dBm + 60;           // S9+60dB
-//			const int16_t      bar_min_dBm  = s0_dBm + (6 * 0);      // S0
-			const int16_t      bar_min_dBm  = s0_dBm + (6 * 4);      // S4
+				const unsigned int line  = 3;
+				char               str[22];
 
-			// ************
+				#ifdef ENABLE_KEYLOCK
+					if (g_eeprom.config.setting.key_lock && g_keypad_locked > 0)
+						return false;     // display is in use
+				#endif
 
-			const unsigned int txt_width    = 7 * 8;                 // 8 text chars
-			const unsigned int bar_x        = 2 + txt_width + 4;     // X coord of bar graph
-			const unsigned int bar_width    = LCD_WIDTH - 1 - bar_x;
-
-			const int16_t      rssi_dBm     = (rssi / 2) - 160;
-			const int16_t      clamped_dBm  = (rssi_dBm <= bar_min_dBm) ? bar_min_dBm : (rssi_dBm >= bar_max_dBm) ? bar_max_dBm : rssi_dBm;
-			const unsigned int bar_range_dB = bar_max_dBm - bar_min_dBm;
-			const unsigned int len          = ((clamped_dBm - bar_min_dBm) * bar_width) / bar_range_dB;
-
-			const unsigned int line         = 3;
-			uint8_t           *p_line        = g_frame_buffer[line];
-
-			char               s[16];
-
-			#ifdef ENABLE_KEYLOCK
-				if (g_eeprom.config.setting.key_lock && g_keypad_locked > 0)
+				if (g_current_function == FUNCTION_TRANSMIT || g_current_display_screen != DISPLAY_MAIN || g_dtmf_call_state != DTMF_CALL_STATE_NONE)
 					return false;     // display is in use
+
+				if (now)
+					memset(g_frame_buffer[line], 0, LCD_WIDTH);
+
+				sprintf(str, "r %3d g %3u n %3u", rssi, glitch, noise);
+				UI_PrintStringSmall(str, 2, 0, line);
+
+				if (now)
+					ST7565_BlitFullScreen();
+
+				return true;
+
+			#else
+
+				(void)glitch;  // TODO:
+				(void)noise;
+
+//				const int          s0_dBm       = -127;                  // S0 .. base level
+				const int          s0_dBm       = -147;                  // S0 .. base level
+
+				const int          s9_dBm       = s0_dBm + (6 * 9);      // S9 .. 6dB/S-Point
+				const int          bar_max_dBm  = s9_dBm + 80;           // S9+80dB
+//				const int          bar_min_dBm  = s0_dBm + (6 * 0);      // S0
+				const int          bar_min_dBm  = s0_dBm + (6 * 2);      // S2
+
+				// ************
+
+				const unsigned int txt_width    = 7 * 8;                 // 8 text chars
+				const unsigned int bar_x        = 2 + txt_width + 4;     // X coord of bar graph
+				const unsigned int bar_width    = LCD_WIDTH - 1 - bar_x;
+
+				const int          rssi_dBm     = (rssi / 2) - 160;
+				const int          clamped_dBm  = (rssi_dBm <= bar_min_dBm) ? bar_min_dBm : (rssi_dBm >= bar_max_dBm) ? bar_max_dBm : rssi_dBm;
+				const unsigned int bar_range_dB = bar_max_dBm - bar_min_dBm;
+				const unsigned int len          = ((clamped_dBm - bar_min_dBm) * bar_width) / bar_range_dB;
+
+				const unsigned int line         = 3;
+
+				char               s[16];
+
+				#ifdef ENABLE_KEYLOCK
+					if (g_eeprom.config.setting.key_lock && g_keypad_locked > 0)
+						return false;     // display is in use
+				#endif
+
+				if (g_current_function == FUNCTION_TRANSMIT ||
+					g_current_display_screen != DISPLAY_MAIN ||
+					g_dtmf_call_state != DTMF_CALL_STATE_NONE)
+					return false;     // display is in use
+
+				if (now)
+					memset(g_frame_buffer[line], 0, LCD_WIDTH);
+
+				if (rssi_dBm >= (s9_dBm + 6))
+				{	// S9+XXdB, 1dB increment
+					const char *fmt[] = {"%3d 9+%u  ", "%3d 9+%2u "};
+					const unsigned int s9_dB = ((rssi_dBm - s9_dBm) <= 99) ? rssi_dBm - s9_dBm : 99;
+					sprintf(s, (s9_dB < 10) ? fmt[0] : fmt[1], rssi_dBm, s9_dB);
+				}
+				else
+				{	// S0 ~ S9, 6dB per S-point
+					const unsigned int s_level = (rssi_dBm >= s0_dBm) ? (rssi_dBm - s0_dBm) / 6 : 0;
+					sprintf(s, "%4d S%u ", rssi_dBm, s_level);
+				}
+				UI_PrintStringSmall(s, 2, 0, line);
+
+				draw_bar(g_frame_buffer[line] + bar_x, len, bar_width);
+
+				if (now)
+					ST7565_BlitFullScreen();
+
+				return true;
+
 			#endif
-
-			if (g_current_function == FUNCTION_TRANSMIT ||
-				g_current_display_screen != DISPLAY_MAIN ||
-				g_dtmf_call_state != DTMF_CALL_STATE_NONE)
-				return false;     // display is in use
-
-			if (now)
-				memset(p_line, 0, LCD_WIDTH);
-
-			if (rssi_dBm >= (s9_dBm + 6))
-			{	// S9+XXdB, 1dB increment
-				const char *fmt[] = {"%3d 9+%u  ", "%3d 9+%2u "};
-				const unsigned int s9_dB = ((rssi_dBm - s9_dBm) <= 99) ? rssi_dBm - s9_dBm : 99;
-				sprintf(s, (s9_dB < 10) ? fmt[0] : fmt[1], rssi_dBm, s9_dB);
-			}
-			else
-			{	// S0 ~ S9, 6dB per S-point
-				const unsigned int s_level = (rssi_dBm >= s0_dBm) ? (rssi_dBm - s0_dBm) / 6 : 0;
-				sprintf(s, "%4d S%u ", rssi_dBm, s_level);
-			}
-			UI_PrintStringSmall(s, 2, 0, line);
-
-			draw_bar(p_line + bar_x, len, bar_width);
-
-			if (now)
-				ST7565_BlitFullScreen();
-
-			return true;
 		}
 
 		return false;
 	}
 #endif
 
-void UI_update_rssi(const int16_t rssi, const int vfo)
+void UI_update_rssi(const int rssi, const unsigned int glitch, const unsigned int noise, const unsigned int vfo)
 {
 	#ifdef ENABLE_RX_SIGNAL_BAR
+
 		if (g_center_line == CENTER_LINE_RSSI)
-		{	// optional larger RSSI dBm, S-point and bar level
+		{	// large RSSI dBm, S-point, bar level
+
+			const int rssi_level = (g_tx_vfo->channel_attributes.band < 3) ? rssi + rssi_offset_band_123 : rssi + rssi_offset_band_4567;
+
 			//if (g_current_function == FUNCTION_RECEIVE && g_squelch_open)
 			if (g_current_function == FUNCTION_RECEIVE)
-				UI_DisplayRSSIBar(rssi, true);
+				UI_DisplayRSSIBar(rssi_level, glitch, noise, true);
 		}
+
+	#else
+		(void)glitch;
+		(void)noise;
 	#endif
 
-	{	// original little RS bars
+	{	// original little RSSI bars
 
-//		const int16_t dBm        = (rssi / 2) - 160;
-		const uint8_t Line       = (vfo == 0) ? 3 : 7;
-		uint8_t      *p_line     = g_frame_buffer[Line - 1];
-		uint8_t       rssi_level = 0;
-
-		// TODO: sort out all 8 values from the eeprom
+		const unsigned int line       = (vfo == 0) ? 3 : 7;
+		uint8_t           *pline      = g_frame_buffer[line - 1];
+		unsigned int       rssi_level = 0;
+		int                rssi_cal[7];
 
 		#if 1
-			const unsigned int band = g_rx_vfo->channel_attributes.band;
-			const int16_t level0  = g_eeprom_rssi_calib[band][0];
-			const int16_t level1  = g_eeprom_rssi_calib[band][1];
-			const int16_t level2  = g_eeprom_rssi_calib[band][2];
-			const int16_t level3  = g_eeprom_rssi_calib[band][3];
+			if (g_tx_vfo->channel_attributes.band < 3)
+			{
+				rssi_cal[0] = g_eeprom.calib.rssi_cal.band_123[0];
+				rssi_cal[2] = g_eeprom.calib.rssi_cal.band_123[1];
+				rssi_cal[4] = g_eeprom.calib.rssi_cal.band_123[2];
+				rssi_cal[6] = g_eeprom.calib.rssi_cal.band_123[3];
+			}
+			else
+			{
+				rssi_cal[0] = g_eeprom.calib.rssi_cal.band_4567[0];
+				rssi_cal[2] = g_eeprom.calib.rssi_cal.band_4567[1];
+				rssi_cal[4] = g_eeprom.calib.rssi_cal.band_4567[2];
+				rssi_cal[6] = g_eeprom.calib.rssi_cal.band_4567[3];
+			}
 		#else
-			const int16_t level0  = (-115 + 160) * 2;   // -115dBm
-			const int16_t level1  = ( -89 + 160) * 2;   //  -89dBm
-			const int16_t level2  = ( -64 + 160) * 2;   //  -64dBm
-			const int16_t level3  = ( -39 + 160) * 2;   //  -39dBm
+			rssi_cal[0] = (-110 + rssi_dBm_offset) * 2;   // -110 dBm
+			rssi_cal[2] = ( -90 + rssi_dBm_offset) * 2;   //  -90 dBm
+			rssi_cal[4] = ( -70 + rssi_dBm_offset) * 2;   //  -70 dBm
+			rssi_cal[6] = ( -50 + rssi_dBm_offset) * 2;   //  -50 dBm
 		#endif
-		// create intermediate threshold values (linear interpolation) to make full use of the available RSSI bars/graphics
-		const int16_t level01 = (level0 + level1) / 2;
-		const int16_t level12 = (level1 + level2) / 2;
-		const int16_t level23 = (level2 + level3) / 2;
+		// linear interpolate the 4 values into 7
+		rssi_cal[1] = (rssi_cal[0] + rssi_cal[2]) / 2;
+		rssi_cal[3] = (rssi_cal[2] + rssi_cal[4]) / 2;
+		rssi_cal[5] = (rssi_cal[4] + rssi_cal[6]) / 2;
 
 		g_vfo_rssi[vfo] = rssi;
 
-		if (rssi >= level3)
+		if (rssi >= rssi_cal[6])
 			rssi_level = 7;
 		else
-		if (rssi >= level23)
+		if (rssi >= rssi_cal[5])
 			rssi_level = 6;
 		else
-		if (rssi >= level2)
+		if (rssi >= rssi_cal[4])
 			rssi_level = 5;
 		else
-		if (rssi >= level12)
+		if (rssi >= rssi_cal[3])
 			rssi_level = 4;
 		else
-		if (rssi >= level1)
+		if (rssi >= rssi_cal[2])
 			rssi_level = 3;
 		else
-		if (rssi >= level01)
+		if (rssi >= rssi_cal[1])
 			rssi_level = 2;
 		else
-		if (rssi >= level0 || g_current_function == FUNCTION_NEW_RECEIVE)
-		{
+		if (rssi >= rssi_cal[0] || g_current_function == FUNCTION_NEW_RECEIVE)
 			rssi_level = 1;
-		}
-
-		if (g_vfo_rssi_bar_level[vfo] == rssi_level)
-			return;
 
 		g_vfo_rssi_bar_level[vfo] = rssi_level;
 
@@ -322,18 +380,14 @@ void UI_update_rssi(const int16_t rssi, const int vfo)
 		if (g_current_function == FUNCTION_TRANSMIT || g_current_display_screen != DISPLAY_MAIN)
 			return;    // display is in use
 
-		p_line = g_frame_buffer[Line - 1];
-
-		memset(p_line, 0, 23);
-
-		// untested !!!
+		memset(pline, 0, 23);
 
 		if (rssi_level == 0)
-			p_line = NULL;
+			pline = NULL;
 		else
-			UI_drawBars(p_line, rssi_level);
+			draw_small_antenna_bars(pline, rssi_level);
 
-		ST7565_DrawLine(0, Line, 23, p_line);
+		ST7565_DrawLine(0, line, 23, pline);
 	}
 }
 
@@ -346,7 +400,7 @@ void big_freq(const uint32_t frequency, const unsigned int x, const unsigned int
 	NUMBER_ToDigits(frequency, str);
 
 	// show the main large frequency digits
-	UI_DisplayFrequency(str, x, line, false, false);
+	UI_DisplayFrequencyBig(str, x, line, false, false, 6);
 
 	// show the remaining 2 small frequency digits
 	#ifdef ENABLE_TRIM_TRAILING_ZEROS
@@ -365,72 +419,175 @@ void big_freq(const uint32_t frequency, const unsigned int x, const unsigned int
 	#endif
 }
 
+#ifdef ENABLE_PANADAPTER
+
+	uint8_t bit_reverse_8(uint8_t n)
+	{
+		n = ((n >> 1) & 0x55) | ((n << 1) & 0xAA);
+		n = ((n >> 2) & 0x33) | ((n << 2) & 0xCC);
+		n = ((n >> 4) & 0x0F) | ((n << 4) & 0xF0);
+		return n;
+	}
+
+	void UI_DisplayMain_pan(const bool now)
+	{
+		const unsigned int line      = (g_eeprom.config.setting.tx_vfo_num == 0) ? 4 : 0;
+		uint8_t           *base_line = g_frame_buffer[line + 2];
+		uint8_t            max_rssi;
+		uint8_t            min_rssi;
+		uint8_t            span_rssi;
+		unsigned int       i;
+
+		if (!g_eeprom.config.setting.panadapter        ||
+		    !g_panadapter_enabled                      ||
+		     single_vfo < 0                            ||
+		     g_current_display_screen != DISPLAY_MAIN  ||
+//		     g_current_function == FUNCTION_TRANSMIT   ||
+		     g_current_function == FUNCTION_POWER_SAVE ||
+		     g_monitor_enabled)
+		{	// don't draw the panadapter
+			return;
+		}
+
+		if (g_dtmf_call_state != DTMF_CALL_STATE_NONE || g_dtmf_is_tx || g_dtmf_input_mode)
+			return;  // DTMF call
+
+//		if (g_input_box_index > 0)
+//			return;  // user is entering a frequency
+
+		// auto vertical scale
+		max_rssi  = g_panadapter_max_rssi;
+		min_rssi  = g_panadapter_min_rssi;
+		span_rssi = max_rssi - min_rssi;
+		if (span_rssi < 40)  // minimum vertical range (20dB)
+		{
+			span_rssi = 40;
+			if (min_rssi > (255 - span_rssi))
+				min_rssi =  255 - span_rssi;
+			max_rssi = min_rssi + span_rssi;
+		}
+
+		if (now)
+		{	// clear our assigned screen area
+			memset(g_frame_buffer[line], 0, LCD_WIDTH * 3);
+		}
+
+		#ifdef ENABLE_PANADAPTER_PEAK_FREQ
+			if (g_panadapter_peak_freq > 0)
+			{	// print the peak frequency
+				char str[16];
+				sprintf(str, "%u.%05u", g_panadapter_peak_freq / 100000, g_panadapter_peak_freq % 100000);
+				NUMBER_trim_trailing_zeros(str);
+				UI_PrintStringSmall(str, 8, 0, line + 0);
+			}
+		#endif
+
+		// draw top center vertical marker (the VFO frequency)
+		base_line[PANADAPTER_BINS - (LCD_WIDTH * 2)] = 0x0F;
+
+		// draw top horizontal dotted line
+		for (i = 0; i < PANADAPTER_BINS; i += 4)
+		{
+			const unsigned int k = PANADAPTER_BINS - (LCD_WIDTH * 2);
+			base_line[k - i] |= 1u;
+			base_line[k + i] |= 1u;
+		}
+
+		// draw the panadapter vertical bins
+		for (i = 0; i < ARRAY_SIZE(g_panadapter_rssi); i++)
+		{
+			uint32_t pixels;
+			uint8_t  rssi = g_panadapter_rssi[i];
+
+			#if 0
+				rssi = (rssi < ((-129 + 160) * 2)) ? 0 : rssi - ((-129 + 160) * 2);  // min of -129dBm (S3)
+				rssi = rssi >> 2;
+			#else
+				rssi = ((uint16_t)(rssi - min_rssi) * 21) / span_rssi;  // 0 ~ 21
+			#endif
+
+			rssi += 2;                  // offset from the bottom
+			if (rssi > 22)
+				rssi = 22;              // limit peak value
+
+			pixels = (1u << rssi) - 1;  // set the line pixels
+			pixels &= 0xfffffffe;       // clear the bottom line
+
+			base_line[i - (LCD_WIDTH * 2)] |= bit_reverse_8(pixels >> 16);
+			base_line[i - (LCD_WIDTH * 1)] |= bit_reverse_8(pixels >>  8);
+			base_line[i - (LCD_WIDTH * 0)] |= bit_reverse_8(pixels >>  0);
+		}
+
+		if (now)
+			ST7565_BlitFullScreen();
+	}
+#endif
+
 void UI_DisplayMain(void)
 {
 	#if !defined(ENABLE_BIG_FREQ) && defined(ENABLE_SMALLEST_FONT)
 		const unsigned int smallest_char_spacing = ARRAY_SIZE(g_font3x5[0]) + 1;
 	#endif
-	const unsigned int line0 = 0;  // text screen line
-	const unsigned int line1 = 4;
+	const unsigned int line0           = 0;  // text screen line
+	const unsigned int line1           = 4;
+	int                main_vfo_num    = g_eeprom.config.setting.tx_vfo_num;
+	int                current_vfo_num = g_eeprom.config.setting.tx_vfo_num;
 	char               str[22];
-	unsigned int       vfo_num;
+	int                vfo_num;
 
 	g_center_line = CENTER_LINE_NONE;
 
-//	#ifdef SINGLE_VFO_CHAN
-//		const bool single_vfo = (g_eeprom.config.setting.dual_watch == DUAL_WATCH_OFF && g_eeprom.config.setting.cross_vfo == CROSS_BAND_OFF) ? true : false;
-//	#else
-		const bool single_vfo = false;
-//	#endif
+	single_vfo = -1;
+
+	if (g_eeprom.config.setting.dual_watch != DUAL_WATCH_OFF && g_rx_vfo_is_active)
+		current_vfo_num = g_rx_vfo_num;    // we're currently monitoring the other VFO
 
 	// clear the screen
 	memset(g_frame_buffer, 0, sizeof(g_frame_buffer));
 
 	if (g_serial_config_tick_500ms > 0)
 	{
-		backlight_turn_on(10);		// 5 seconds
+		BACKLIGHT_turn_on(5);		// 5 seconds
 		UI_PrintString("UART", 0, LCD_WIDTH, 1, 8);
 		UI_PrintString("CONFIG COMMS", 0, LCD_WIDTH, 3, 8);
 		ST7565_BlitFullScreen();
+		g_center_line = CENTER_LINE_IN_USE;
 		return;
 	}
 
 	#ifdef ENABLE_KEYLOCK
 		if (g_eeprom.config.setting.key_lock && g_keypad_locked > 0)
 		{	// tell user how to unlock the keyboard
-			backlight_turn_on(10);     // 5 seconds
+			BACKLIGHT_turn_on(5);     // 5 seconds
 			UI_PrintString("Long press #", 0, LCD_WIDTH, 1, 8);
 			UI_PrintString("to unlock",    0, LCD_WIDTH, 3, 8);
 			ST7565_BlitFullScreen();
+			g_center_line = CENTER_LINE_IN_USE;
 			return;
 		}
+	#endif
+
+	#ifdef ENABLE_PANADAPTER
+		if (g_eeprom.config.setting.dual_watch == DUAL_WATCH_OFF && g_eeprom.config.setting.cross_vfo == CROSS_BAND_OFF)
+			if (g_dtmf_call_state == DTMF_CALL_STATE_NONE && !g_dtmf_is_tx && !g_dtmf_input_mode)
+				if (g_eeprom.config.setting.panadapter && g_panadapter_enabled)
+					if (!g_monitor_enabled)
+						single_vfo = g_eeprom.config.setting.tx_vfo_num;
 	#endif
 
 	for (vfo_num = 0; vfo_num < 2; vfo_num++)
 	{
 		const unsigned int scrn_chan  = g_eeprom.config.setting.indices.vfo[vfo_num].screen;
 		const unsigned int line       = (vfo_num == 0) ? line0 : line1;
-		unsigned int       channel    = g_eeprom.config.setting.tx_vfo_num;
-//		unsigned int       tx_channel = (g_eeprom.config.setting.cross_vfo == CROSS_BAND_OFF) ? g_rx_vfo_num : g_eeprom.config.setting.tx_vfo_num;
-		const bool         same_vfo   = (channel == vfo_num) ? true : false;
 		uint8_t           *p_line0    = g_frame_buffer[line + 0];
 		uint8_t           *p_line1    = g_frame_buffer[line + 1];
 		unsigned int       mode       = 0;
 		unsigned int       state;
 
-		if (single_vfo)
-		{	// we're in single VFO mode - screen is dedicated to just one VFO
+		if (single_vfo >= 0 && single_vfo != vfo_num)
+			continue;	// we're in single VFO mode - screen is dedicated to just one VFO
 
-			if (!same_vfo)
-				continue;  // skip the unused vfo
-
-
-		}
-
-		if (g_eeprom.config.setting.dual_watch != DUAL_WATCH_OFF && g_rx_vfo_is_active)
-			channel = g_rx_vfo_num;    // we're currently monitoring the other VFO
-
-		if (channel != vfo_num)
+		if (current_vfo_num != vfo_num)
 		{
 			if (g_dtmf_call_state != DTMF_CALL_STATE_NONE || g_dtmf_is_tx || g_dtmf_input_mode)
 			{	// show DTMF stuff
@@ -495,19 +652,19 @@ void UI_DisplayMain(void)
 			}
 
 			// highlight the selected/used VFO with a marker
-			if (!single_vfo && same_vfo)
+			if (!single_vfo && current_vfo_num == vfo_num)
 				memcpy(p_line0 + 0, BITMAP_VFO_DEFAULT, sizeof(BITMAP_VFO_DEFAULT));
 			else
 			if (g_eeprom.config.setting.cross_vfo || vfo_num == LastIncomeChannel)
 				memcpy(p_line0 + 0, BITMAP_VFO_NOT_DEFAULT, sizeof(BITMAP_VFO_NOT_DEFAULT));
 		}
 		else
-		if (!single_vfo)
+		if (single_vfo < 0)
 		{	// highlight the selected/used VFO with a marker
-			if (same_vfo)
+			if (vfo_num == main_vfo_num)
 				memcpy(p_line0 + 0, BITMAP_VFO_DEFAULT, sizeof(BITMAP_VFO_DEFAULT));
 			else
-			//if (g_eeprom.config.setting.cross_vfo != CROSS_BAND_OFF)
+			if (g_eeprom.config.setting.cross_vfo != CROSS_BAND_OFF || vfo_num == current_vfo_num)
 				if (vfo_num == LastIncomeChannel)
 				memcpy(p_line0 + 0, BITMAP_VFO_NOT_DEFAULT, sizeof(BITMAP_VFO_NOT_DEFAULT));
 		}
@@ -521,8 +678,8 @@ void UI_DisplayMain(void)
 				else
 			#endif
 			{
-				channel = (g_eeprom.config.setting.cross_vfo == CROSS_BAND_OFF) ? g_rx_vfo_num : g_eeprom.config.setting.tx_vfo_num;
-				if (channel == vfo_num)
+				current_vfo_num = (g_eeprom.config.setting.cross_vfo == CROSS_BAND_OFF) ? g_rx_vfo_num : g_eeprom.config.setting.tx_vfo_num;
+				if (current_vfo_num == vfo_num)
 				{	// show the TX symbol
 					mode = 1;
 					#ifdef ENABLE_SMALL_BOLD
@@ -608,9 +765,10 @@ void UI_DisplayMain(void)
 		}
 		else
 		if (g_input_box_index > 0 && IS_FREQ_CHANNEL(scrn_chan) && g_eeprom.config.setting.tx_vfo_num == vfo_num)
-		{	// user entering a frequency
-			UI_DisplayFrequency(g_input_box, 32, line, true, false);
-
+		{	// user is entering a frequency
+//			UI_DisplayFrequencyBig(g_input_box, 32, line, true, false, 6);
+//			UI_DisplayFrequencyBig(g_input_box, 32, line, true, false, 7);
+			UI_DisplayFrequency(g_input_box, 32, line, true, 8);
 //			g_center_line = CENTER_LINE_IN_USE;
 		}
 		else
@@ -618,15 +776,16 @@ void UI_DisplayMain(void)
 			const unsigned int x = 32;
 
 			uint32_t frequency = g_vfo_info[vfo_num].p_rx->frequency;
+
 			if (g_current_function == FUNCTION_TRANSMIT)
 			{	// transmitting
-				channel = (g_eeprom.config.setting.cross_vfo == CROSS_BAND_OFF) ? g_rx_vfo_num : g_eeprom.config.setting.tx_vfo_num;
-				if (channel == vfo_num)
+				current_vfo_num = (g_eeprom.config.setting.cross_vfo == CROSS_BAND_OFF) ? g_rx_vfo_num : g_eeprom.config.setting.tx_vfo_num;
+				if (current_vfo_num == vfo_num)
 					frequency = g_vfo_info[vfo_num].p_tx->frequency;
 			}
 
 			if (scrn_chan <= USER_CHANNEL_LAST)
-			{	// it's a channel
+			{	// a user channel
 
 				switch (g_eeprom.config.setting.channel_display_mode)
 				{
@@ -657,8 +816,9 @@ void UI_DisplayMain(void)
 
 						SETTINGS_fetch_channel_name(str, scrn_chan);
 						if (str[0] == 0)
-						{	// no channel name available, channel number instead
-							sprintf(str, "CH-%03u", 1 + scrn_chan);
+						{	// no channel name, use channel number
+//							sprintf(str, "CH-%03u", 1 + scrn_chan);
+							sprintf(str, "CH-%u", 1 + scrn_chan);
 						}
 
 						if (g_eeprom.config.setting.channel_display_mode == MDF_NAME)
@@ -667,16 +827,17 @@ void UI_DisplayMain(void)
 						}
 						else
 						{	// name & frequency
-							
+
 							// name
 							#ifdef ENABLE_SMALL_BOLD
-								UI_PrintStringSmallBold(str, x + 4, 0, line);
+								UI_PrintStringSmallBold(str, x + 4, 0, line + 0);
 							#else
-								UI_PrintStringSmall(str, x + 4, 0, line);
+								UI_PrintStringSmall(str, x + 4, 0, line + 0);
 							#endif
 
 							// frequency
-							sprintf(str, "%03u.%05u", frequency / 100000, frequency % 100000);
+//							sprintf(str, "%03u.%05u", frequency / 100000, frequency % 100000);
+							sprintf(str, "%u.%05u", frequency / 100000, frequency % 100000);
 							#ifdef ENABLE_TRIM_TRAILING_ZEROS
 								NUMBER_trim_trailing_zeros(str);
 							#endif
@@ -692,13 +853,41 @@ void UI_DisplayMain(void)
 				#ifdef ENABLE_BIG_FREQ
 					big_freq(frequency, x, line);
 				#else
-					// show the frequency in the main font
 
-					sprintf(str, "%03u.%05u", frequency / 100000, frequency % 100000);
+					#ifdef ENABLE_SHOW_FREQS_CHAN
+						const unsigned int chan = g_vfo_info[vfo_num].freq_in_channel;
+					#endif
+
+//					sprintf(str, "%03u.%05u", frequency / 100000, frequency % 100000);
+					sprintf(str, "%u.%05u", frequency / 100000, frequency % 100000);
 					#ifdef ENABLE_TRIM_TRAILING_ZEROS
 						NUMBER_trim_trailing_zeros(str);
 					#endif
-					UI_PrintString(str, x, 0, line, 8);
+
+					#ifdef ENABLE_SHOW_FREQS_CHAN
+						//g_vfo_info[vfo_num].freq_in_channel = SETTINGS_find_channel(frequency);
+						if (chan <= USER_CHANNEL_LAST)
+						{	// the frequency has a channel - show the channel name below the frequency
+
+							// frequency
+							#ifdef ENABLE_SMALL_BOLD
+								UI_PrintStringSmallBold(str, x + 4, 0, line + 0);
+							#else
+								UI_PrintStringSmall(str, x + 4, 0, line + 0);
+							#endif
+
+							// channel name, if not then channel number
+							SETTINGS_fetch_channel_name(str, chan);
+							if (str[0] == 0)
+//								sprintf(str, "CH-%03u", 1 + chan);
+								sprintf(str, "CH-%u", 1 + chan);
+							UI_PrintStringSmall(str, x + 4, 0, line + 1);
+						}
+						else
+					#endif
+					{	// show the frequency in the main font
+						UI_PrintString(str, x, 0, line, 8);
+					}
 
 				#endif
 			}
@@ -745,30 +934,38 @@ void UI_DisplayMain(void)
 			}
 			#else
 			{
-				const bool is_freq_chan       = IS_FREQ_CHANNEL(scrn_chan);
-				const uint8_t freq_in_channel = g_vfo_info[vfo_num].freq_in_channel;
-//				const uint8_t freq_in_channel = SETTINGS_find_channel(frequency);  // currently way to slow
-
-				if (g_vfo_info[vfo_num].channel.compand)
-				{
+				#ifdef ENABLE_SHOW_FREQS_CHAN
 					strcpy(str, "  ");
 
-					if (is_freq_chan && freq_in_channel <= USER_CHANNEL_LAST)
-						str[0] = 'F';  // channel number that contains this VFO frequency
-	
+					#ifdef ENABLE_SCAN_IGNORE_LIST
+						if (FI_freq_ignored(frequency) >= 0)
+							str[0] = 'I';  // frequency is in the ignore list
+					#endif
+
 					if (g_vfo_info[vfo_num].channel.compand)
 						str[1] = 'C';  // compander is enabled
 
 					UI_PrintStringSmall(str, LCD_WIDTH - (7 * 2), 0, line + 1);
-				}
-				else
-				{
+				#else
+					const bool is_freq_chan       = IS_FREQ_CHANNEL(scrn_chan);
+					const uint8_t freq_in_channel = g_vfo_info[vfo_num].freq_in_channel;
+//					const uint8_t freq_in_channel = SETTINGS_find_channel(frequency);  // was way to slow
+
+					strcpy(str, "   ");
+
+					#ifdef ENABLE_SCAN_IGNORE_LIST
+						if (FI_freq_ignored(frequency) >= 0)
+							str[0] = 'I';  // frequency is in the ignore list
+					#endif
+
 					if (is_freq_chan && freq_in_channel <= USER_CHANNEL_LAST)
-					{	// channel number that contains this VFO frequency
-						sprintf(str, "%03u", freq_in_channel);
-						UI_PrintStringSmall(str, LCD_WIDTH - (7 * 3), 0, line + 1);
-					}
-				}
+						str[1] = 'F';  // this VFO frequency is also found in a channel
+
+					if (g_vfo_info[vfo_num].channel.compand)
+						str[2] = 'C';  // compander is enabled
+
+					UI_PrintStringSmall(str, LCD_WIDTH - (7 * 3), 0, line + 1);
+				#endif
 			}
 			#endif
 		}
@@ -794,28 +991,24 @@ void UI_DisplayMain(void)
 					Level = g_vfo_rssi_bar_level[vfo_num];
 			}
 
-			UI_drawBars(p_line1 + LCD_WIDTH, Level);
+			draw_small_antenna_bars(p_line1 + LCD_WIDTH, Level);
 		}
 
 		// ************
 
 		str[0] = '\0';
-		if (g_vfo_info[vfo_num].channel.am_mode > 0)
-		{
-			//strcpy(str, g_sub_menu_mod_mode[g_vfo_info[vfo_num].channel.am_mode]);
-			switch (g_vfo_info[vfo_num].channel.am_mode)
-			{
-				default:
-				case 0: strcpy(str, "FM"); break;
-				case 1: strcpy(str, "AM"); break;
-				case 2: strcpy(str, "DS"); break;
-			}
+		if (g_vfo_info[vfo_num].channel.mod_mode != MOD_MODE_FM)
+		{	// show the modulation mode
+			const char *mode_list[] = {"FM", "AM", "SB", "??"};
+			const unsigned int mode = g_vfo_info[vfo_num].channel.mod_mode;
+			if (mode < ARRAY_SIZE(mode_list))
+				strcpy(str, mode_list[mode]);
 		}
 		else
-		{	// or show the CTCSS/DCS symbol
+		{	// or show the CTCSS/DCS symbol (when in FM mode)
 			const freq_config_t *pConfig = (mode == 1) ? g_vfo_info[vfo_num].p_tx : g_vfo_info[vfo_num].p_rx;
 			const unsigned int code_type = pConfig->code_type;
-			const char *code_list[] = {"", "CT", "DCS", "DCR"};
+			const char *code_list[] = {"FM", "CTC", "DCS", "DCR"};
 			if (code_type < ARRAY_SIZE(code_list))
 				strcpy(str, code_list[code_type]);
 		}
@@ -824,7 +1017,7 @@ void UI_DisplayMain(void)
 		#ifdef ENABLE_TX_WHEN_AM
 			if (state == VFO_STATE_NORMAL || state == VFO_STATE_ALARM)
 		#else
-			if ((state == VFO_STATE_NORMAL || state == VFO_STATE_ALARM) && g_vfo_info[vfo_num].channel.am_mode == 0) // TX allowed only when FM
+			if ((state == VFO_STATE_NORMAL || state == VFO_STATE_ALARM) && g_vfo_info[vfo_num].channel.mod_mode == MOD_MODE_FM) // TX allowed only when FM
 		#endif
 		{
 			if (FREQUENCY_tx_freq_check(g_vfo_info[vfo_num].p_tx->frequency) == 0)
@@ -835,7 +1028,7 @@ void UI_DisplayMain(void)
 				str[0] = (i < ARRAY_SIZE(pwr_list)) ? pwr_list[i] : '\0';
 				str[1] = '\0';
 				UI_PrintStringSmall(str, 46, 0, line + 2);
-		
+
 				if (g_vfo_info[vfo_num].freq_config_rx.frequency != g_vfo_info[vfo_num].freq_config_tx.frequency)
 				{	// show the TX offset symbol
 					const char dir_list[] = "\0+-";
@@ -846,20 +1039,19 @@ void UI_DisplayMain(void)
 				}
 			}
 		}
-		
+
 		// show the TX/RX reverse symbol
 		if (g_vfo_info[vfo_num].channel.frequency_reverse)
 			UI_PrintStringSmall("R", 62, 0, line + 2);
 
-		{	// show the narrow band symbol
-			str[0] = '\0';
-			if (g_vfo_info[vfo_num].channel.channel_bandwidth == BANDWIDTH_NARROW)
-			{
-				str[0] = 'N';
-				str[1] = '\0';
-			}
-			UI_PrintStringSmall(str, 70, 0, line + 2);
-		}
+		// show the narrow band symbol
+		strcpy(str, " ");
+		if (g_vfo_info[vfo_num].channel.channel_bandwidth == BANDWIDTH_WIDE)
+			str[0] = 'W';
+		else
+		if (g_vfo_info[vfo_num].channel.channel_bandwidth == BANDWIDTH_NARROW)
+			str[0] = 'N';
+		UI_PrintStringSmall(str, 70, 0, line + 2);
 
 		// show the DTMF decoding symbol
 		#ifdef ENABLE_KILL_REVIVE
@@ -868,7 +1060,6 @@ void UI_DisplayMain(void)
 		#else
 			if (g_vfo_info[vfo_num].channel.dtmf_decoding_enable)
 				UI_PrintStringSmall("DTMF", 78, 0, line + 2);
-				//UI_PrintStringSmall4x5("DTMF", 78, 0, line + 2);   // font table is currently wrong
 				//UI_PrintStringSmallest("DTMF", 78, (line + 2) * 8, false, true);
 		#endif
 
@@ -876,6 +1067,8 @@ void UI_DisplayMain(void)
 		if (g_vfo_info[vfo_num].channel.scrambler > 0 && g_eeprom.config.setting.enable_scrambler)
 			UI_PrintStringSmall("SCR", 106, 0, line + 2);
 	}
+
+	// *************************************************
 
 	if (g_center_line == CENTER_LINE_NONE &&
 		g_current_display_screen == DISPLAY_MAIN &&
@@ -914,7 +1107,7 @@ void UI_DisplayMain(void)
 
 		#if defined(ENABLE_AM_FIX) && defined(ENABLE_AM_FIX_SHOW_DATA)
 			// show the AM-FIX debug data
-			if (rx && g_vfo_info[g_rx_vfo_num].am_mode > 0 && g_eeprom.config.setting.am_fix)
+			if (rx && g_vfo_info[g_rx_vfo_num].mod_mode != MOD_MODE_FM && g_eeprom.config.setting.am_fix)
 			{
 				g_center_line = CENTER_LINE_AM_FIX_DATA;
 				AM_fix_print_data(g_rx_vfo_num, str);
@@ -927,8 +1120,9 @@ void UI_DisplayMain(void)
 			// show the RX RSSI dBm, S-point and signal strength bar graph
 			if (rx && g_eeprom.config.setting.enable_rssi_bar)
 			{
+				const int rssi_level = (g_tx_vfo->channel_attributes.band < 3) ? g_current_rssi[g_rx_vfo_num] + rssi_offset_band_123 : g_current_rssi[g_rx_vfo_num] + rssi_offset_band_4567;
 				g_center_line = CENTER_LINE_RSSI;
-				UI_DisplayRSSIBar(g_current_rssi[g_rx_vfo_num], false);
+				UI_DisplayRSSIBar(rssi_level, g_current_glitch[g_rx_vfo_num], g_current_noise[g_rx_vfo_num], false);
 			}
 			else
 		#endif
@@ -984,6 +1178,11 @@ void UI_DisplayMain(void)
 			#endif
 		}
 	}
+
+	#ifdef ENABLE_PANADAPTER
+		//if (single_vfo >= 0)
+			UI_DisplayMain_pan(false);
+	#endif
 
 	ST7565_BlitFullScreen();
 }

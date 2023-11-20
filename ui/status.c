@@ -32,6 +32,14 @@
 #include "ui/ui.h"
 #include "ui/status.h"
 
+void invert_pixels(void *p, const unsigned int size)
+{
+	unsigned int i;
+	uint8_t *p8 = (uint8_t *)p; 
+	for (i = 0; i < size; i++)
+		*p8++ ^= 0xff;
+}
+
 void UI_DisplayStatus(const bool test_display)
 {
 	uint8_t     *line = g_status_line;
@@ -47,6 +55,7 @@ void UI_DisplayStatus(const bool test_display)
 	if (g_current_function == FUNCTION_TRANSMIT)
 	{
 		memcpy(line + x, BITMAP_TX, sizeof(BITMAP_TX));
+		invert_pixels(line + x, sizeof(BITMAP_TX));
 	}
 	else
 	if (g_current_function == FUNCTION_RECEIVE ||
@@ -125,18 +134,32 @@ void UI_DisplayStatus(const bool test_display)
 	// DUAL-WATCH indicator
 	if (g_eeprom.config.setting.dual_watch != DUAL_WATCH_OFF || test_display)
 	{
+		bool dw_running = true;
+
+		#ifdef ENABLE_FMRADIO
+			if (g_fm_radio_mode && g_current_display_screen == DISPLAY_FM)
+				dw_running = false;
+			else
+		#endif
+
 		if (g_dual_watch_tick_10ms > dual_watch_delay_toggle_10ms ||
-	        g_dtmf_call_state != DTMF_CALL_STATE_NONE ||
-		    g_scan_state_dir != SCAN_STATE_DIR_OFF  ||
+			g_dtmf_call_state != DTMF_CALL_STATE_NONE ||
+			g_scan_state_dir != SCAN_STATE_DIR_OFF  ||
 			g_css_scan_mode != CSS_SCAN_MODE_OFF    ||
 			(g_current_function != FUNCTION_FOREGROUND && g_current_function != FUNCTION_POWER_SAVE) ||
 			g_current_display_screen == DISPLAY_SEARCH)
 		{
-			memcpy(line + x, BITMAP_TDR_HOLDING, sizeof(BITMAP_TDR_HOLDING));
+			dw_running = false;
+		}
+
+		if (dw_running)
+		{
+			memcpy(line + x, BITMAP_TDR_RUNNING, sizeof(BITMAP_TDR_RUNNING));
+			invert_pixels(line + x, sizeof(BITMAP_TDR_RUNNING));
 		}
 		else
 		{
-			memcpy(line + x, BITMAP_TDR_RUNNING, sizeof(BITMAP_TDR_RUNNING));
+			memcpy(line + x, BITMAP_TDR_HOLDING, sizeof(BITMAP_TDR_HOLDING));
 		}
 		x += sizeof(BITMAP_TDR_RUNNING) + 1;
 	}
@@ -160,6 +183,8 @@ void UI_DisplayStatus(const bool test_display)
 		if (g_eeprom.config.setting.vox_enabled || test_display)
 		{
 			memcpy(line + x, g_vox_audio_detected ? BITMAP_VOX : BITMAP_VOX_SMALL, sizeof(BITMAP_VOX));
+//			if (g_vox_audio_detected)
+//				invert_pixels(line + x, sizeof(BITMAP_VOX));
 			x += sizeof(BITMAP_VOX) + 1;
 		}
 	#endif
@@ -169,6 +194,7 @@ void UI_DisplayStatus(const bool test_display)
 	if (g_eeprom.config.setting.key_lock || test_display)
 	{
 		memcpy(line + x, BITMAP_KEYLOCK, sizeof(BITMAP_KEYLOCK));
+		invert_pixels(line + x, sizeof(BITMAP_KEYLOCK));
 		x += sizeof(BITMAP_KEYLOCK) + 1;
 	}
 	else
@@ -176,6 +202,7 @@ void UI_DisplayStatus(const bool test_display)
 	if (g_fkey_pressed)
 	{
 		memcpy(line + x, BITMAP_F_KEY, sizeof(BITMAP_F_KEY));
+//		invert_pixels(line + x, sizeof(BITMAP_F_KEY));
 		x += sizeof(BITMAP_F_KEY);
 	}
 	x++;

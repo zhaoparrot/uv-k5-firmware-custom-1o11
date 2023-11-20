@@ -52,84 +52,101 @@
 #include "ui/status.h"
 #include "version.h"
 
-void MAIN_DisplayInitScreen(void)
-{
-	memset(g_status_line,  0, sizeof(g_status_line));
-	memset(g_frame_buffer, 0, sizeof(g_frame_buffer));
-
-	UI_PrintString("UV-K5(8)/K6", 0, LCD_WIDTH, 2, 10);
-
-	ST7565_BlitStatusLine();
-	ST7565_BlitFullScreen();
-}
-
 void MAIN_DisplayReleaseKeys(void)
 {
-//	memset(g_status_line,  0, sizeof(g_status_line));
+	memset(g_status_line,  0, sizeof(g_status_line));
 	memset(g_frame_buffer, 0, sizeof(g_frame_buffer));
 
 	UI_PrintString("RELEASE",  0, LCD_WIDTH, 1, 10);
 	UI_PrintString("ALL KEYS", 0, LCD_WIDTH, 3, 10);
 
-//	ST7565_BlitStatusLine();  // blank status line
+	ST7565_BlitStatusLine();  // blank status line
 	ST7565_BlitFullScreen();
+
+	BACKLIGHT_turn_on(0);
 }
 
-void MAIN_DisplayWelcome(void)
+void MAIN_DisplayPowerOn(void)
 {
 	char str0[17];
 	char str1[17];
 	char str2[17];
 	
-//	memset(g_status_line,  0, sizeof(g_status_line));
+	unsigned int slen = strlen(Version_str);
+	if (slen > (sizeof(str2) - 1))
+		slen =  sizeof(str2) - 1;
+
+	memset(g_status_line,  0, sizeof(g_status_line));
 	memset(g_frame_buffer, 0, sizeof(g_frame_buffer));
 
-	if (g_eeprom.config.setting.power_on_display_mode == PWR_ON_DISPLAY_MODE_NONE)
-	{
-		ST7565_FillScreen(0xFF);
-	}
-	else
-	if (g_eeprom.config.setting.power_on_display_mode == PWR_ON_DISPLAY_MODE_FULL_SCREEN)
-	{
-		ST7565_FillScreen(0xFF);
-	}
-	else
-	{
-		unsigned int slen = strlen(Version_str);
-		if (slen > (sizeof(str2) - 1))
-			slen =  sizeof(str2) - 1;
+	memset(str0, 0, sizeof(str0));
+	memset(str1, 0, sizeof(str1));
+	memset(str2, 0, sizeof(str2));
 
-		memset(str0, 0, sizeof(str0));
-		memset(str1, 0, sizeof(str1));
-		memset(str2, 0, sizeof(str2));
+	// fetch backlight time
+	EEPROM_ReadBuffer(0x0E78, ((uint8_t *)&g_eeprom) + 0x0E78, 16);
 
-		if (g_eeprom.config.setting.power_on_display_mode == PWR_ON_DISPLAY_MODE_VOLTAGE)
-		{
+	// fetch power-on mode
+	EEPROM_ReadBuffer(0x0E90, ((uint8_t *)&g_eeprom) + 0x0E90, 16);
+
+	switch (g_eeprom.config.setting.power_on_display_mode)
+	{
+		case PWR_ON_DISPLAY_MODE_FULL_SCREEN:
+			ST7565_FillScreen(0xFF);
+			break;
+
+		case PWR_ON_DISPLAY_MODE_VOLTAGE:
+			EEPROM_ReadBuffer(0x1F40, &g_eeprom.calib.battery, 16);
+
+			{
+				unsigned int i;
+				for (i = 0; i < ARRAY_SIZE(g_battery_voltages); i++)
+					BOARD_ADC_GetBatteryInfo(&g_battery_voltages[i], &g_usb_current);
+				BATTERY_GetReadings(false);
+			}
+
 			strcpy(str0, "VOLTAGE");
 			sprintf(str1, "%u.%02uV %u%%",
 				g_battery_voltage_average / 100,
 				g_battery_voltage_average % 100,
 				BATTERY_VoltsToPercent(g_battery_voltage_average));
-		}
-		else
-		{
-			//EEPROM_ReadBuffer(0x0EB0, str0, 16);
-			//sEEPROM_ReadBuffer(0x0EC0, str1, 16);
+
+			memcpy(str2, Version_str, slen);
+			break;
+
+		case PWR_ON_DISPLAY_MODE_MESSAGE:
+			EEPROM_ReadBuffer(0x0EB0, ((uint8_t *)&g_eeprom) + 0x0EB0, 32);
 			memcpy(str0, g_eeprom.config.setting.welcome_line[0], 16);
 			memcpy(str1, g_eeprom.config.setting.welcome_line[1], 16);
-		}
+			memcpy(str2, Version_str, slen);
+			break;
 
-		memcpy(str2, Version_str, slen);
-		
+		case PWR_ON_DISPLAY_MODE_NONE:
+			break;
+
+		default:
+			UI_PrintString("UV-K5(8)/K6", 0, LCD_WIDTH, 2, 10);
+			break;
+	}
+
+	if (g_eeprom.config.setting.power_on_display_mode != PWR_ON_DISPLAY_MODE_NONE &&
+	    g_eeprom.config.setting.power_on_display_mode != PWR_ON_DISPLAY_MODE_FULL_SCREEN)
+	{
 		UI_PrintString(str0, 0, LCD_WIDTH, 0, 10);
 		UI_PrintString(str1, 0, LCD_WIDTH, 2, 10);
 		UI_PrintStringSmall(str2, 0, LCD_WIDTH, 4);
 		UI_PrintStringSmall(__DATE__, 0, LCD_WIDTH, 5);
 		UI_PrintStringSmall(__TIME__, 0, LCD_WIDTH, 6);
+	}
 
-//		ST7565_BlitStatusLine();
+	if (g_eeprom.config.setting.power_on_display_mode != PWR_ON_DISPLAY_MODE_FULL_SCREEN)
+	{
+		ST7565_BlitStatusLine();
 		ST7565_BlitFullScreen();
 	}
+
+	if (g_eeprom.config.setting.power_on_display_mode != PWR_ON_DISPLAY_MODE_NONE)
+		BACKLIGHT_turn_on(0);   // turn the back light on
 }
 
 void Main(void)
@@ -146,7 +163,8 @@ void Main(void)
 		| SYSCON_DEV_CLK_GATE_SPI0_BITS_ENABLE
 		| SYSCON_DEV_CLK_GATE_SARADC_BITS_ENABLE
 		| SYSCON_DEV_CLK_GATE_CRC_BITS_ENABLE
-		| SYSCON_DEV_CLK_GATE_AES_BITS_ENABLE;
+		| SYSCON_DEV_CLK_GATE_AES_BITS_ENABLE
+		| SYSCON_DEV_CLK_GATE_PWM_PLUS0_BITS_ENABLE;
 
 	SYSTICK_Init();
 
@@ -157,6 +175,7 @@ void Main(void)
 		UART_Init();
 	#endif
 	BOARD_ADC_Init();
+	BACKLIGHT_init();
 	ST7565_Init(true);
 	#ifdef ENABLE_FMRADIO
 		BK1080_Init(0, false);
@@ -169,13 +188,26 @@ void Main(void)
 	#if defined(ENABLE_UART)
 		UART_SendText(UART_Version_str);
 		UART_SendText("\r\n");
+		{
+			//const unsigned long *unique = (const unsigned long *)0x1FFFF7E8;  // STM32 M0
+			//UART_printf("serial num %08X %08X %08X\r\n", unique[0], unique[1], unique[2]);
+		}
 	#endif
 
 	BootMode = BOOT_GetMode();
 	g_unhide_hidden = (BootMode == BOOT_MODE_UNHIDE_HIDDEN); // flag to say include the hidden menu items
 
-	GPIO_SetBit(&GPIOB->DATA, GPIOB_PIN_BACKLIGHT);  // backlight on
-	MAIN_DisplayInitScreen();
+	if (!GPIO_CheckBit(&GPIOC->DATA, GPIOC_PIN_PTT) ||
+	     KEYBOARD_Poll() != KEY_INVALID ||
+		 BootMode != BOOT_MODE_NORMAL)
+	{
+		MAIN_DisplayReleaseKeys();
+		BACKLIGHT_turn_on(0);    // turn the backlight ON
+	}
+	else
+	{
+		MAIN_DisplayPowerOn();
+	}
 
 	// load the entire EEPROM contents into memory
 	SETTINGS_read_eeprom();
@@ -187,11 +219,11 @@ void Main(void)
 	BOARD_ADC_GetBatteryInfo(&g_usb_current_voltage, &g_usb_current);
 
 	#ifdef ENABLE_CONTRAST
-		ST7565_SetContrast(g_setting_contrast);
+		ST7565_SetContrast(g_eeprom.config.setting.lcd_contrast);
 	#endif
 
 	#if defined(ENABLE_UART)
-		UART_printf("BK4819  id %04X  rev %04X\r\n", BK4819_ReadRegister(0x00), BK4819_ReadRegister(0x01));
+		UART_printf("BK4819  id %04X  rev %04X\r\n", BK4819_read_reg(0x00), BK4819_read_reg(0x01));
 		#ifdef ENABLE_FMRADIO
 			UART_printf("BK1080  id %04X  rev %04X\r\n", BK1080_ReadRegister(0x01), BK1080_ReadRegister(0x00));
 		#endif
@@ -217,7 +249,6 @@ void Main(void)
 
 	for (i = 0; i < ARRAY_SIZE(g_battery_voltages); i++)
 		BOARD_ADC_GetBatteryInfo(&g_battery_voltages[i], &g_usb_current);
-
 	BATTERY_GetReadings(false);
 
 	#if defined(ENABLE_UART) && defined(ENABLE_UART_DEBUG)
@@ -247,17 +278,17 @@ void Main(void)
 		FUNCTION_Select(FUNCTION_POWER_SAVE);
 
 		if (g_eeprom.config.setting.backlight_time < (ARRAY_SIZE(g_sub_menu_backlight) - 1))
-			GPIO_ClearBit(&GPIOB->DATA, GPIOB_PIN_BACKLIGHT);	// turn the backlight OFF
+			BACKLIGHT_turn_off();
 		else
-			GPIO_SetBit(&GPIOB->DATA, GPIOB_PIN_BACKLIGHT);  	// turn the backlight ON
+			BACKLIGHT_turn_on(0);                               // turn the backlight ON
 
 		g_reduced_service = true;
 	}
 	else
 	{
-		MAIN_DisplayWelcome();
+		BACKLIGHT_turn_on(0);
 
-		backlight_turn_on(0);
+		MAIN_DisplayPowerOn();
 
 		#ifdef ENABLE_VOICE
 //			AUDIO_SetVoiceID(0, VOICE_ID_WELCOME);

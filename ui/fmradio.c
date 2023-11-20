@@ -36,7 +36,7 @@ void UI_DisplayFM(void)
 	#ifdef ENABLE_KEYLOCK
 	if (g_eeprom.config.setting.key_lock && g_keypad_locked > 0)
 	{	// tell user how to unlock the keyboard
-		backlight_turn_on(0);
+		BACKLIGHT_turn_on(0);
 		UI_PrintString("Long press #", 0, LCD_WIDTH - 1, 1, 8);
 		UI_PrintString("to unlock",    0, LCD_WIDTH - 1, 3, 8);
 		ST7565_BlitFullScreen();
@@ -120,14 +120,14 @@ void UI_DisplayFM(void)
 			const uint32_t freq = g_eeprom.config.setting.fm_radio.selected_frequency;
 			NUMBER_ToDigits(freq * 10000, str);
 			#ifdef ENABLE_TRIM_TRAILING_ZEROS
-				UI_DisplayFrequency(str, 30, 4, false, true);
+				UI_DisplayFrequencyBig(str, 30, 4, false, true, 6);
 			#else
-				UI_DisplayFrequency(str, 23, 4, false, true);
+				UI_DisplayFrequencyBig(str, 23, 4, false, true, 6);
 			#endif
 		}
 		else
 		{	// user is entering a frequency
-			UI_DisplayFrequency(g_input_box, 23, 4, true, false);
+			UI_DisplayFrequencyBig(g_input_box, 23, 4, true, false, 6);
 		}
 	}
 	else

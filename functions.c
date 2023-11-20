@@ -39,6 +39,7 @@
 #include "misc.h"
 #include "radio.h"
 #include "settings.h"
+#include "ui/menu.h"
 #include "ui/status.h"
 #include "ui/ui.h"
 
@@ -50,7 +51,7 @@ void FUNCTION_Init(void)
 	{
 		g_current_code_type = g_selected_code_type;
 		if (g_css_scan_mode == CSS_SCAN_MODE_OFF)
-			g_current_code_type = (g_rx_vfo->channel.am_mode > 0) ? CODE_TYPE_NONE : g_rx_vfo->p_rx->code_type;
+			g_current_code_type = (g_rx_vfo->channel.mod_mode > 0) ? CODE_TYPE_NONE : g_rx_vfo->p_rx->code_type;
 	}
 	else
 		g_current_code_type = CODE_TYPE_CONTINUOUS_TONE;
@@ -133,13 +134,13 @@ void FUNCTION_Select(function_type_t Function)
 
 		case FUNCTION_NEW_RECEIVE:
 			#if defined(ENABLE_UART) && defined(ENABLE_UART_DEBUG)
-				UART_SendText("func new receive\r\n");
+				UART_printf("func new receive %u\r\n", g_rx_vfo->freq_config_rx.frequency);
 			#endif
 			break;
 			
 		case FUNCTION_RECEIVE:
 			#if defined(ENABLE_UART) && defined(ENABLE_UART_DEBUG)
-				UART_SendText("func receive\r\n");
+				UART_printf("func receive %u\r\n", g_rx_vfo->freq_config_rx.frequency);
 			#endif
 			break;
 
@@ -171,11 +172,30 @@ void FUNCTION_Select(function_type_t Function)
 
 		case FUNCTION_TRANSMIT:
 			#if defined(ENABLE_UART) && defined(ENABLE_UART_DEBUG)
-				UART_SendText("func transmit\r\n");
+				UART_printf("func transmit %u\r\n", g_tx_vfo->freq_config_tx.frequency);
 			#endif
 
+			g_tx_timer_tick_500ms = 0;
+			g_tx_timeout_reached  = false;
+			g_flag_end_tx         = false;
+		
+			g_rtte_count_down = 0;
+		
+			#if defined(ENABLE_ALARM) || defined(ENABLE_TX1750)
+				if (g_alarm_state == ALARM_STATE_OFF)
+			#endif
+			{
+				if (g_eeprom.config.setting.tx_timeout == 0)
+					g_tx_timer_tick_500ms = 60;   // 30 sec
+				else
+				if (g_eeprom.config.setting.tx_timeout < (ARRAY_SIZE(g_sub_menu_tx_timeout) - 1))
+					g_tx_timer_tick_500ms = 120 * g_eeprom.config.setting.tx_timeout;  // minutes
+				else
+					g_tx_timer_tick_500ms = 120 * 15;  // 15 minutes
+			}
+
 			if (g_eeprom.config.setting.backlight_on_tx_rx == 1 || g_eeprom.config.setting.backlight_on_tx_rx == 3)
-				backlight_turn_on(backlight_tx_rx_time_500ms);
+				BACKLIGHT_turn_on(backlight_tx_rx_time_secs);
 
 			if (g_eeprom.config.setting.dual_watch != DUAL_WATCH_OFF)
 			{	// dual-RX is enabled
@@ -209,34 +229,13 @@ void FUNCTION_Select(function_type_t Function)
 
 			GUI_DisplayScreen();
 
-			#ifdef ENABLE_ALARM
-				if (g_alarm_state == ALARM_STATE_TXALARM && g_eeprom.config.setting.alarm_mode != ALARM_MODE_TONE)
-				{	// enable the alarm tone but not the TX
-			
-					g_alarm_state = ALARM_STATE_ALARM;
-
-					GUI_DisplayScreen();
-
-					GPIO_ClearBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
-
-					SYSTEM_DelayMs(2);
-					BK4819_StartTone1(500, 28);
-					SYSTEM_DelayMs(2);
-
-					GPIO_SetBit(&GPIOC->DATA, GPIOC_PIN_SPEAKER);
-
-					SYSTEM_DelayMs(60);
-					BK4819_ExitTxMute();
-
-					g_alarm_tone_counter_10ms = 0;
-					break;
-				}
-			#endif
-
-			if (g_current_vfo->channel.scrambler == 0 || !g_eeprom.config.setting.enable_scrambler)
-				BK4819_DisableScramble();
+			BK4819_set_scrambler(0);
 
 			RADIO_enableTX(false);
+
+			#if defined(ENABLE_UART) && defined(ENABLE_UART_DEBUG)
+//				UART_printf("function tx %u %s\r\n", g_dtmf_reply_state, g_dtmf_string);
+			#endif
 
 			#if defined(ENABLE_ALARM) || defined(ENABLE_TX1750)
 				if (g_alarm_state != ALARM_STATE_OFF)
@@ -261,50 +260,38 @@ void FUNCTION_Select(function_type_t Function)
 				}
 				else
 			#endif
-
 			if (!DTMF_Reply())
 			{
 			#ifdef ENABLE_MDC1200
 				if (g_current_vfo->channel.mdc1200_mode == MDC1200_MODE_BOT || g_current_vfo->channel.mdc1200_mode == MDC1200_MODE_BOTH)
 				{
-					BK4819_WriteRegister(0x30,
-						(1u  << 15) |    // enable  VCO calibration
-						(1u  << 14) |    // enable something or other
-						(0u  << 10) |    // diable  RX link
-						(1u  <<  9) |    // enable  AF DAC
-						(1u  <<  8) |    // enable  DISC mode, what's DISC mode ?
-						(15u <<  4) |    // enable  PLL/VCO
-						(1u  <<  3) |    // enable  PA gain
-						(0u  <<  2) |    // disable MIC ADC
-						(1u  <<  1) |    // enable  TX DSP
-						(0u  <<  0));    // disable RX DSP
-					SYSTEM_DelayMs(120);
-					BK4819_send_MDC1200(MDC1200_OP_CODE_PTT_ID, 0x80, g_eeprom.config.setting.mdc1200_id);
+					#ifdef ENABLE_MDC1200_SIDE_BEEP
+//						BK4819_start_tone(880, 10, true, true);
+//						SYSTEM_DelayMs(120);
+//						BK4819_stop_tones(true);
+					#endif
+					SYSTEM_DelayMs(30);
+
+					BK4819_send_MDC1200(MDC1200_OP_CODE_PTT_ID, 0x80, g_eeprom.config.setting.mdc1200_id, true);
+
+					#ifdef ENABLE_MDC1200_SIDE_BEEP
+						BK4819_start_tone(880, 10, true, true);
+						SYSTEM_DelayMs(120);
+						BK4819_stop_tones(true);
+					#endif
 				}
 				else
 			#endif
 				if (g_current_vfo->channel.dtmf_ptt_id_tx_mode == PTT_ID_APOLLO)
 				{
-					BK4819_PlayTone(APOLLO_TONE1_HZ, APOLLO_TONE_MS, 0);
+					BK4819_start_tone(APOLLO_TONE1_HZ, 28, true, false);
+					SYSTEM_DelayMs(APOLLO_TONE_MS);
+					BK4819_stop_tones(true);
 				}
 			}
-/*			
-			BK4819_WriteRegister(0x30,
-				(1u  << 15) |    // enable  VCO calibration
-				(1u  << 14) |    // enable  something or other
-				(0u  << 10) |    // diable  RX link
-				(1u  <<  9) |    // enable  AF DAC
-				(1u  <<  8) |    // enable  DISC mode, what's DISC mode ?
-				(15u <<  4) |    // enable  PLL/VCO
-				(1u  <<  3) |    // enable  PA gain
-				(1u  <<  2) |    // enable  MIC ADC
-				(1u  <<  1) |    // enable  TX DSP
-				(0u  <<  0));    // disable RX DSP
-*/
-			if (g_current_vfo->channel.scrambler > 0 && g_eeprom.config.setting.enable_scrambler)
-			{
-				BK4819_EnableScramble(g_current_vfo->channel.scrambler - 1);
-			}
+
+			if (g_eeprom.config.setting.enable_scrambler)
+				BK4819_set_scrambler(g_current_vfo->channel.scrambler);
 			
 			break;
 
@@ -316,8 +303,8 @@ void FUNCTION_Select(function_type_t Function)
 			break;
 	}
 
-	g_schedule_power_save_tick_10ms = battery_save_count_10ms;
-	g_schedule_power_save          = false;
+	g_power_save_pause_tick_10ms = power_save_pause_10ms;
+	g_power_save_pause_done      = false;
 
 	#ifdef ENABLE_FMRADIO
 		g_fm_restore_tick_10ms = 0;

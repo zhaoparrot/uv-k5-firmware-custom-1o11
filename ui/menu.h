@@ -71,6 +71,9 @@ enum
 #ifdef ENABLE_CONTRAST
 	MENU_CONTRAST,
 #endif
+#ifdef ENABLE_SCAN_RANGES
+	MENU_SCAN_RANGES,
+#endif
 	MENU_S_ADD1,
 	MENU_S_ADD2,
 #ifdef ENABLE_NOAA
@@ -81,6 +84,9 @@ enum
 	MENU_RP_STE,
 	MENU_MIC_GAIN,
 	MENU_COMPAND,
+#ifdef ENABLE_PANADAPTER
+	MENU_PANADAPTER,
+#endif
 #ifdef ENABLE_TX_AUDIO_BAR
 	MENU_TX_BAR,
 #endif
@@ -185,7 +191,7 @@ extern const char         g_sub_menu_ptt_id[5][16];
 	extern const char     g_sub_menu_mdc1200_mode[4][8];
 #endif
 extern const char         g_sub_menu_pwr_on_msg[4][14];
-extern const char         g_sub_menu_roger_mode[2][16];
+extern const char         g_sub_menu_roger_mode[3][15];
 extern const char         g_sub_menu_reset[2][4];
 extern const char         g_sub_menu_backlight[8][7];
 extern const char         g_sub_menu_rx_tx[4][6];
@@ -194,7 +200,6 @@ extern const char         g_sub_menu_rx_tx[4][6];
 #endif
 extern const char         g_sub_menu_bat_text[3][8];
 extern const char         g_sub_menu_dis_en[2][9];
-extern const char         g_sub_menu_scrambler[11][7];
 #ifdef ENABLE_SIDE_BUTT_MENU
 	extern const char     g_sub_menu_side_butt[9][16];
 #endif

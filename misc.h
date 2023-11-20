@@ -126,7 +126,7 @@ extern const uint16_t        fm_play_noscan_10ms;
 extern const uint8_t         menu_timeout_500ms;
 extern const uint16_t        menu_timeout_long_500ms;
 
-extern const uint16_t        backlight_tx_rx_time_500ms;
+extern const uint16_t        backlight_tx_rx_time_secs;
 
 extern const uint8_t         dtmf_rx_live_timeout_500ms;
 extern const uint8_t         dtmf_rx_timeout_500ms;
@@ -148,7 +148,7 @@ extern const uint8_t         key_repeat_10ms;
 extern const uint16_t        search_freq_css_10ms;
 extern const uint16_t        search_10ms;
 
-extern const uint16_t        battery_save_count_10ms;
+extern const uint16_t        power_save_pause_10ms;
 
 extern const uint16_t        power_save1_10ms;
 extern const uint16_t        power_save2_10ms;
@@ -177,26 +177,14 @@ extern const uint16_t        scan_pause_chan_10ms;
 
 extern const uint8_t         g_mic_gain_dB_2[5];
 
-#ifdef ENABLE_CONTRAST
-	extern uint8_t           g_setting_contrast;
-#endif
-
-extern uint8_t               g_setting_side1_short;
-extern uint8_t               g_setting_side1_long;
-extern uint8_t               g_setting_side2_short;
-extern uint8_t               g_setting_side2_long;
-
 extern bool                  g_monitor_enabled;
 
 extern const uint32_t        g_default_aes_key[4];
 extern bool                  g_has_aes_key;
 extern uint32_t              g_challenge[4];
 
-extern uint16_t              g_eeprom_rssi_calib[7][4];
-
-extern volatile uint16_t     g_schedule_power_save_tick_10ms;
-extern volatile bool         g_schedule_power_save;
-
+extern volatile uint16_t     g_power_save_pause_tick_10ms;
+extern volatile bool         g_power_save_pause_done;
 extern volatile bool         g_power_save_expired;
 
 extern volatile uint16_t     g_dual_watch_tick_10ms;
@@ -254,7 +242,7 @@ extern bool                  g_request_save_settings;
 extern bool                  g_flag_prepare_tx;
 
 extern bool                  g_flag_accept_setting;   // accept menu setting
-extern bool                  g_flag_refresh_menu;  // refresh menu display
+extern bool                  g_update_menu;  // refresh menu display
 
 extern bool                  g_flag_save_vfo;
 extern bool                  g_flag_save_settings;
@@ -285,12 +273,15 @@ extern bool                  g_flag_end_tx;
 extern uint16_t              g_low_battery_tick_10ms;
 extern reception_mode_t      g_rx_reception_mode;
 
+extern uint32_t              g_scan_initial_lower;
+extern uint32_t              g_scan_initial_upper;
+extern uint32_t              g_scan_initial_step_size;
 extern uint8_t               g_scan_next_channel;      //
 extern scan_next_chan_t      g_scan_current_scan_list; //
 extern uint8_t               g_scan_restore_channel;   // the channel   we were on before starting the RF scan
 extern uint32_t              g_scan_restore_frequency; // the frequency we were on before starting the RF scan
 extern bool                  g_scan_pause_time_mode;   // set if we stopped in SCAN_RESUME_TIME mode
-extern volatile uint16_t     g_scan_pause_tick_10ms;        // ticks till we move to next channel/frequency
+extern volatile uint16_t     g_scan_tick_10ms;         // ticks till we move to next channel/frequency
 extern scan_state_dir_t      g_scan_state_dir;         // the direction we're scanning in
 
 extern uint8_t               g_rx_vfo_num;
@@ -321,10 +312,19 @@ extern volatile bool         g_next_time_slice_40ms;
 	extern volatile bool     g_schedule_noaa;
 #endif
 extern volatile bool         g_flag_tail_tone_elimination_complete;
-extern int16_t               g_current_rssi[2];   // now one per VFO
+
+extern int16_t               g_current_rssi[2];
+extern uint16_t              g_current_glitch[2];
+extern uint16_t              g_current_noise[2];
+
 extern volatile uint16_t     g_boot_tick_10ms;
 
 extern uint8_t               g_mic_sensitivity_tuning;
+
+extern const uint8_t         g_orig_lnas;
+extern const uint8_t         g_orig_lna;
+extern const uint8_t         g_orig_mixer;
+extern const uint8_t         g_orig_pga;
 
 unsigned int get_TX_VFO(void);
 unsigned int get_RX_VFO(void);

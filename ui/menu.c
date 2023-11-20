@@ -85,12 +85,18 @@ const t_menu_item g_menu_list[] =
 #ifdef ENABLE_KEYLOCK
 	{"KeyLOC", VOICE_ID_INVALID,                       MENU_AUTO_KEY_LOCK         }, // was "AUTOLk"
 #endif
+#ifdef ENABLE_SCAN_RANGES
+	{"SRANGE", VOICE_ID_INVALID,                       MENU_SCAN_RANGES           },
+#endif
 	{"S ADD1", VOICE_ID_INVALID,                       MENU_S_ADD1                },
 	{"S ADD2", VOICE_ID_INVALID,                       MENU_S_ADD2                },
 	{"STE",    VOICE_ID_INVALID,                       MENU_STE                   },
 	{"RP STE", VOICE_ID_INVALID,                       MENU_RP_STE                },
 	{"MIC GN", VOICE_ID_INVALID,                       MENU_MIC_GAIN              },
 	{"COMPND", VOICE_ID_INVALID,                       MENU_COMPAND               },
+#ifdef ENABLE_PANADAPTER
+	{"PANA",   VOICE_ID_INVALID,                       MENU_PANADAPTER            },
+#endif
 #ifdef ENABLE_TX_AUDIO_BAR
 	{"Tx BAR", VOICE_ID_INVALID,                       MENU_TX_BAR                },
 #endif
@@ -311,11 +317,11 @@ const char g_sub_menu_pwr_on_msg[4][14] =
 	"NONE"
 };
 
-const char g_sub_menu_roger_mode[2][16] =
+const char g_sub_menu_roger_mode[3][15] =
 {
 	"OFF",
-	"TX END\nROGER",
-//	"TX END\nMDC1200"
+	"TX END\nROGER 1",
+	"TX END\nROGER 2"
 };
 
 const char g_sub_menu_reset[2][4] =
@@ -365,21 +371,6 @@ const char g_sub_menu_dis_en[2][9] =
 {
 	"DISABLED",
 	"ENABLED"
-};
-
-const char g_sub_menu_scrambler[11][7] =
-{
-	"OFF",
-	"2600Hz",
-	"2700Hz",
-	"2800Hz",
-	"2900Hz",
-	"3000Hz",
-	"3100Hz",
-	"3200Hz",
-	"3300Hz",
-	"3400Hz",
-	"3500Hz"
 };
 
 #ifdef ENABLE_SIDE_BUTT_MENU
@@ -573,8 +564,8 @@ void UI_DisplayMenu(void)
 				strcpy(str, "USE\nMAIN SQL");
 			else
 				sprintf(str, "%d", g_sub_menu_selection);
-//			g_tx_vfo->squelch_level = g_sub_menu_selection;
-//			RADIO_ConfigureSquelchAndOutputPower(g_tx_vfo);
+			//g_tx_vfo->squelch_level = g_sub_menu_selection;
+			//RADIO_ConfigureSquelch(g_tx_vfo);
 			channel_setting = true;
 			break;
 
@@ -703,13 +694,16 @@ void UI_DisplayMenu(void)
 
 		case MENU_SCRAMBLER:
 			strcpy(str, "INVERT\n");
-			strcat(str, g_sub_menu_scrambler[g_sub_menu_selection]);
+			if (g_sub_menu_selection == 0)
+				strcat(str, "OFF");
+			else
+				sprintf(str + strlen(str), "%uHz", 2600 + ((g_sub_menu_selection - 1) * 50));
 
 			#if 1
-				if (g_sub_menu_selection > 0 && g_eeprom.config.setting.enable_scrambler)
-					BK4819_EnableScramble(g_sub_menu_selection - 1);
+				if (g_eeprom.config.setting.enable_scrambler)
+					BK4819_set_scrambler(g_sub_menu_selection);
 				else
-					BK4819_DisableScramble();
+					BK4819_set_scrambler(0);
 			#endif
 			channel_setting = true;
 			break;
@@ -726,6 +720,7 @@ void UI_DisplayMenu(void)
 		case MENU_AUTO_BACKLITE:
 			strcpy(str, "BACKLITE\n");
 			strcat(str, g_sub_menu_backlight[g_sub_menu_selection]);
+			BACKLIGHT_turn_on(5);
 			break;
 
 		case MENU_AUTO_BACKLITE_ON_TX_RX:
@@ -763,21 +758,42 @@ void UI_DisplayMenu(void)
 			case MENU_CONTRAST:
 				strcpy(str, "CONTRAST\n");
 				sprintf(str + strlen(str), "%d", g_sub_menu_selection);
-				//g_setting_contrast = g_sub_menu_selection
 				ST7565_SetContrast(g_sub_menu_selection);
 				g_update_display = true;
 				break;
 		#endif
 
+		#ifdef ENABLE_PANADAPTER
+			case MENU_PANADAPTER:
+				strcpy(str, g_sub_menu_off_on[g_sub_menu_selection]);
+				break;
+		#endif
+
 		#ifdef ENABLE_TX_AUDIO_BAR
 			case MENU_TX_BAR:
+				strcpy(str, g_sub_menu_off_on[g_sub_menu_selection]);
+				break;
 		#endif
+
 		#ifdef ENABLE_RX_SIGNAL_BAR
 			case MENU_RX_BAR:
+				strcpy(str, g_sub_menu_off_on[g_sub_menu_selection]);
+				break;
 		#endif
+
 		#ifdef ENABLE_AM_FIX
 //			case MENU_AM_FIX:
+				strcpy(str, g_sub_menu_off_on[g_sub_menu_selection]);
+				break;
 		#endif
+
+		#ifdef ENABLE_SCAN_RANGES
+			case MENU_SCAN_RANGES:
+				strcpy(str, "SCAN\nRANGES\n");
+				strcat(str, g_sub_menu_off_on[g_sub_menu_selection]);
+				break;
+		#endif
+
 		case MENU_S_ADD1:
 		case MENU_S_ADD2:
 			strcpy(str, g_sub_menu_off_on[g_sub_menu_selection]);
@@ -857,7 +873,7 @@ void UI_DisplayMenu(void)
 		case MENU_MEM_DEL:
 		{
 			char s[11];
-			const bool valid = RADIO_CheckValidChannel(g_sub_menu_selection, false, 0);
+			const bool valid = RADIO_channel_valid(g_sub_menu_selection, false, 0);
 
 			UI_GenerateChannelStringEx(str, valid ? "CH-" : "", g_sub_menu_selection);
 
@@ -882,7 +898,7 @@ void UI_DisplayMenu(void)
 
 		case MENU_MEM_NAME:
 		{
-			const bool valid = RADIO_CheckValidChannel(g_sub_menu_selection, false, 0);
+			const bool valid = RADIO_channel_valid(g_sub_menu_selection, false, 0);
 			const unsigned int y = (!g_in_sub_menu || g_edit_index < 0) ? 1 : 0;
 
 			UI_GenerateChannelStringEx(str, valid ? "CH-" : "", g_sub_menu_selection);
@@ -983,7 +999,7 @@ void UI_DisplayMenu(void)
 		#endif
 
 		case MENU_ANI_ID:
-			strcpy(str, "YOUR ID\n");
+			strcpy(str, "DTMF ID\n");
 			strcat(str, g_eeprom.config.setting.dtmf.ani_id);
 			break;
 
